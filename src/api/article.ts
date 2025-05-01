@@ -75,6 +75,7 @@ const generateQrCode = async (data: string): Promise<string> => {
   }
 };
 
+
 const update = async (id: number, updateArticleDto: UpdateArticleDto): Promise<Article> => {
   try {
     console.log('Données envoyées:', updateArticleDto);
@@ -242,7 +243,7 @@ const extractFromImage = async (file: File): Promise<CreateArticleDto> => {
   }
 };
 
-
+/*
 const extractFromPdf = async (file: File): Promise<CreateArticleDto> => {
   const formData = new FormData();
   formData.append('file', file);
@@ -323,7 +324,162 @@ const compareWithImage = async (
     console.error("Erreur lors de la comparaison avec image:", error);
     throw new Error(`Impossible de comparer avec l'image: ${console.error}`);
   }
+};*/// Ajoutez ces interfaces en haut du fichier si elles n'existent pas déjà
+interface ArticleStats {
+  totalArticles: number;
+  statusCounts: Record<string, number>;
+  statusPercentages: Record<string, string>;
+  outOfStockCount: number;
+  totalStockAvailable: number;
+  averageStockPerArticle: number;
+  lowStockCount: number;
+  outOfStockSinceDays: Record<string, number>;
+  topStockValueArticles: Array<{ reference: string; value: number }>;
+  toArchiveSuggestions: string[];
+}
+
+interface StockAlerts {
+  outOfStock: Array<{
+    reference: string;
+    title?: string;
+    daysOutOfStock: number;
+  }>;
+  lowStock: Array<{
+    reference: string;
+    title?: string;
+    remainingStock: number;
+  }>;
+}
+
+interface StatusOverview {
+  counts: Record<string, number>;
+  examples: Record<string, Array<{ reference: string; title?: string }>>;
+}
+
+interface ArticleQualityScore {
+  id: number;
+  reference: string;
+  title?: string;
+  score: number;
+  missingFields: string[];
+}
+
+interface SuspiciousArticle {
+  id: number;
+  reference: string;
+  title?: string;
+  quantity?: number;
+}
+
+interface PriceTrend {
+  oldArticles: {
+    count: number;
+    averagePrice: number;
+  };
+  newArticles: {
+    count: number;
+    averagePrice: number;
+  };
+  priceEvolution: {
+    amount: number;
+    percentage: number;
+    trend: 'up' | 'down' | 'stable';
+  };
+}
+
+interface StockHealth {
+  activePercentage: number;
+  status: 'poor' | 'medium' | 'good';
+  details: Record<string, number>;
+}
+
+// Ajoutez ces méthodes à l'objet article à la fin du fichier
+const getSimpleStats = async (): Promise<ArticleStats> => {
+  try {
+    const response = await axios.get<ArticleStats>('/public/article/stats/simple');
+    return response.data;
+  } catch (error) {
+    console.error("Erreur lors de la récupération des statistiques:", error);
+    throw new Error("Impossible de récupérer les statistiques.");
+  }
 };
+
+const getStockAlerts = async (): Promise<StockAlerts> => {
+  try {
+    const response = await axios.get<StockAlerts>('/public/article/stats/stock-alerts');
+    return response.data;
+  } catch (error) {
+    console.error("Erreur lors de la récupération des alertes de stock:", error);
+    throw new Error("Impossible de récupérer les alertes de stock.");
+  }
+};
+
+const getStatusOverview = async (): Promise<StatusOverview> => {
+  try {
+    const response = await axios.get<StatusOverview>('/public/article/stats/status-overview');
+    return response.data;
+  } catch (error) {
+    console.error("Erreur lors de la récupération de l'aperçu des statuts:", error);
+    throw new Error("Impossible de récupérer l'aperçu des statuts.");
+  }
+};
+
+const getQualityScores = async (): Promise<{
+  scores: ArticleQualityScore[];
+  incompleteArticles: ArticleQualityScore[];
+}> => {
+  try {
+    const response = await axios.get<{
+      scores: ArticleQualityScore[];
+      incompleteArticles: ArticleQualityScore[];
+    }>('/public/article/stats/quality-scores');
+    return response.data;
+  } catch (error) {
+    console.error("Erreur lors de la récupération des scores de qualité:", error);
+    throw new Error("Impossible de récupérer les scores de qualité.");
+  }
+};
+
+const getSuspiciousArticles = async (): Promise<{
+  zeroPrice: SuspiciousArticle[];
+  highStock: SuspiciousArticle[];
+  invalidReference: SuspiciousArticle[];
+}> => {
+  try {
+    const response = await axios.get<{
+      zeroPrice: SuspiciousArticle[];
+      highStock: SuspiciousArticle[];
+      invalidReference: SuspiciousArticle[];
+    }>('/public/article/stats/suspicious-articles');
+    return response.data;
+  } catch (error) {
+    console.error("Erreur lors de la détection d'articles suspects:", error);
+    throw new Error("Impossible de détecter les articles suspects.");
+  }
+};
+
+const getPriceTrends = async (): Promise<PriceTrend> => {
+  try {
+    const response = await axios.get<PriceTrend>('/public/article/stats/price-trends');
+    return response.data;
+  } catch (error) {
+    console.error("Erreur lors de la récupération des tendances de prix:", error);
+    throw new Error("Impossible de récupérer les tendances de prix.");
+  }
+};
+
+const getStockHealth = async (): Promise<StockHealth> => {
+  try {
+    const response = await axios.get<StockHealth>('/public/article/stats/stock-health');
+    return response.data;
+  } catch (error) {
+    console.error("Erreur lors de la récupération de l'état du stock:", error);
+    throw new Error("Impossible de récupérer l'état du stock.");
+  }
+};
+
+
+// N'oubliez pas d'ajouter ces méthodes à l'objet exporté à la fin du fichier
 export const article = {
   findPaginated,
   findOne,
@@ -348,7 +504,15 @@ export const article = {
   validateSubCategory,
   searchCategories,
   extractFromImage,
-  extractFromPdf,
-  compareWithPdf,    // Nouvelle méthode
-  compareWithImage   // Nouvelle méthode
+  /* extractFromPdf,
+  compareWithPdf,
+  compareWithImage, */
+  // Ajoutez ces nouvelles méthodes
+  getSimpleStats,
+  getStockAlerts,
+  getStatusOverview,
+  getQualityScores,
+  getSuspiciousArticles,
+  getPriceTrends,
+  getStockHealth
 };

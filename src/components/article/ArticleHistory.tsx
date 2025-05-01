@@ -1,48 +1,36 @@
 import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/router';
-import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { articleHistory } from '@/api/article-history';
 import { ResponseArticleHistoryDto } from '@/types/article-history';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/common/Spinner';
-import { useBreadcrumb } from '@/components/layout/BreadcrumbContext';
-import { PageHeader } from '@/components/common/PageHeader';
-import { BreadcrumbCommon } from '../common';
-import { ColumnDef } from '@tanstack/react-table';
 import { DataTable } from './data-table/data-table';
 import { api } from '@/api';
+import { ColumnDef } from '@tanstack/react-table';
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
+import { toast } from 'sonner';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { MoreHorizontal, Trash2, Download, Undo2 } from 'lucide-react';
 
-interface ArticleHistoryListProps {
-  articleId: number;
-}
-
-const ArticleHistoryList: React.FC<ArticleHistoryListProps> = ({ articleId }) => {
-  const { t: tCommon } = useTranslation('common');
-  const { t: tArticleHistory } = useTranslation('articleHistory');
-  const router = useRouter();
-  const { setRoutes } = useBreadcrumb();
-
+const ArticleHistoryList = ({ articleId }: { articleId: number }) => {
+  const { t } = useTranslation('articleHistory');
   const [history, setHistory] = useState<ResponseArticleHistoryDto[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setRoutes([
-      { title: 'menu.inventory', href: '/inventory' },
-      { title: 'submenu.articles', href: '/inventory/articles' },
-    ]);
-  }, [router.locale]);
+  const [loading, setLoading] = useState(true);
 
   const fetchArticleHistory = async () => {
     try {
+      setLoading(true);
       const data = await articleHistory.getArticleHistory(articleId);
-      setHistory(data);
-      setError(null);
+      setHistory(data || []);
     } catch (err) {
-      setError(tArticleHistory('error_fetching'));
-      console.error(err);
+      console.error("Fetch error:", err);
     } finally {
       setLoading(false);
     }
@@ -51,27 +39,33 @@ const ArticleHistoryList: React.FC<ArticleHistoryListProps> = ({ articleId }) =>
   const handleDownloadPdf = async (articleId: number, version: number) => {
     try {
       await articleHistory.downloadPdf(articleId, version);
-      toast.success(tArticleHistory('pdf_downloaded'));
+      toast.success(t('pdf_downloaded'));
     } catch (err) {
-      console.error("Erreur lors du téléchargement du PDF:", err);
-      toast.error(tArticleHistory('error_downloading_pdf'));
+      toast.error(t('error_downloading_pdf'));
     }
   };
 
   const handleRestoreVersion = async (version: number) => {
-    const confirm = window.confirm(
-      tArticleHistory('confirm_restore', { version })
-    );
+    if (!window.confirm(t('confirm_restore', { version }))) return;
     
-    if (!confirm) return;
-
     try {
-      await api.article.restoreVersion(articleId, version); // Utilisation modifiée
-      toast.success(tArticleHistory('version_restored'));
-      await fetchArticleHistory();
+      await api.article.restoreVersion(articleId, version);
+      toast.success(t('version_restored'));
+      fetchArticleHistory();
     } catch (err) {
-      console.error("Erreur lors de la restauration:", err);
-      toast.error(tArticleHistory('error_restoring'));
+      toast.error(t('error_restoring'));
+    }
+  };
+
+  const handleDeleteVersion = async (version: number) => {
+    if (!window.confirm(t('confirm_delete_version', { version }))) return;
+    
+    try {
+      await articleHistory.deleteVersion(articleId, version); 
+      toast.success(t('version_deleted'));
+      fetchArticleHistory();
+    } catch (err) {
+      toast.error(t('error_deleting_version'));
     }
   };
 
@@ -79,116 +73,106 @@ const ArticleHistoryList: React.FC<ArticleHistoryListProps> = ({ articleId }) =>
     fetchArticleHistory();
   }, [articleId]);
 
+  // Fonction pour formater les valeurs spécifiques
+  const formatFieldValue = (field: string, value: any) => {
+    if (value === null || value === undefined) return 'N/A';
+    
+    // Formatage spécifique pour les champs numériques
+    if (field === 'unitPrice') {
+      return parseFloat(value).toFixed(2);
+    }
+    
+    // Formatage des dates
+    if (field === 'updatedAt' || field === 'createdAt') {
+      return format(new Date(value), 'PPPp', { locale: fr });
+    }
+    
+    return value.toString();
+  };
+
   const columns: ColumnDef<ResponseArticleHistoryDto>[] = [
     {
       accessorKey: 'version',
-      header: tArticleHistory('version'),
-      cell: ({ row }) => (
-        <div className="text-sm font-medium">Version {row.original.version}</div>
-      ),
+      header: t('version'),
+      cell: ({ row }) => `Version ${row.original.version}`,
     },
     {
       accessorKey: 'date',
-      header: tArticleHistory('date'),
-      cell: ({ row }) => (
-        <div className="text-sm text-gray-600">
-          {new Date(row.original.date).toLocaleString()}
-        </div>
-      ),
+      header: t('date'),
+      cell: ({ row }) => format(new Date(row.original.date), 'PPPp', { locale: fr }),
     },
     {
       accessorKey: 'changes',
-      header: tArticleHistory('changes'),
+      header: t('changes'),
       cell: ({ row }) => (
-        <ul className="space-y-1">
+        <div className="space-y-1">
           {Object.entries(row.original.changes).map(([field, change]) => (
-            <li key={field} className="text-sm">
-              <strong className="text-gray-700">{field}:</strong>{' '}
-              <span className="text-gray-600">{change.oldValue}</span>{' '}
-              <span className="text-gray-400">→</span>{' '}
-              <span className="text-gray-600">{change.newValue}</span>
-            </li>
+            <div key={field} className="flex items-center gap-2">
+              <span className="font-medium">{field}:</span>
+              <span className="text-muted-foreground">
+                {formatFieldValue(field, change.oldValue)}
+              </span>
+              <span>→</span>
+              <span>{formatFieldValue(field, change.newValue)}</span>
+            </div>
           ))}
-        </ul>
+        </div>
       ),
     },
     {
       id: 'actions',
-      header: tCommon('actions'),
+      header: t('actions'),
       cell: ({ row }) => (
-        <div className="flex space-x-2">
-          <Button
-            onClick={() => handleRestoreVersion(row.original.version)}
-            variant="default"
-            size="sm"
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            {tArticleHistory('restore_version')}
-          </Button>
-          
-          <Button
-            onClick={() => handleDownloadPdf(row.original.articleId, row.original.version)}
-            variant="outline"
-            size="sm"
-          >
-            {tArticleHistory('download_pdf')}
-          </Button>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0">
+              <span className="sr-only">Ouvrir le menu</span>
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={() => handleRestoreVersion(row.original.version)}
+              className="cursor-pointer"
+            >
+              <Undo2 className="mr-2 h-4 w-4" />
+              {t('restore_version')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => handleDownloadPdf(row.original.articleId, row.original.version)}
+              className="cursor-pointer"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              {t('download_pdf')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => handleDeleteVersion(row.original.version)}
+              className="cursor-pointer text-red-600"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {t('delete_version')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       ),
     },
   ];
 
-  if (loading) {
-    return (
-      <div className="text-center text-gray-600 p-4">
-        <Spinner />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="text-center text-red-500 p-4">
-        {error}
-      </div>
-    );
-  }
-
-  if (history.length === 0) {
-    return (
-      <div className="text-center text-gray-600 p-4">
-        {tArticleHistory('no_history_found')}
-      </div>
-    );
-  }
+  if (loading) return <Spinner className="mx-auto my-8" />;
 
   return (
-    <div className="space-y-2 p-4">
-      <PageHeader
-        title={tArticleHistory('Historique de l\'article')}
-        description={tArticleHistory('')}
-        level="h1"
-        className="mb-2"
-      />
-
-      <BreadcrumbCommon className="mb-2" />
-
-      <Card>
-        <CardHeader className="p-2">
-          <CardTitle className="text-lg">{tArticleHistory('')}</CardTitle>
-          <CardDescription className="text-sm">
-            {tArticleHistory('')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-2">
-          <DataTable
-            data={history}
-            columns={columns}
-            isPending={loading}
-          />
-        </CardContent>
-      </Card>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('Historique de l\'article')}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <DataTable
+          columns={columns}
+          data={history}
+          emptyMessage={t('no_history_found')}
+        />
+      </CardContent>
+    </Card>
   );
 };
 

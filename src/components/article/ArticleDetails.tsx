@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { toast } from 'sonner';
 import { api, article } from '@/api';
-import { Article, ArticleCompareResponseDto, UpdateArticleDto } from '@/types';
+import { Article, ArticleCompareResponseDto, UpdateArticleDto, ArticleStatus } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,6 +11,16 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/common/Spinner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Edit, Save, X, FileText, Image } from 'lucide-react';
+
+const statusOptions = [
+  { value: 'draft', label: 'Brouillon' },
+  { value: 'active', label: 'Actif' },
+  { value: 'inactive', label: 'Inactif' },
+  { value: 'archived', label: 'Archivé' },
+  { value: 'out_of_stock', label: 'Rupture de stock' },
+  { value: 'pending_review', label: 'En attente de revue' },
+  { value: 'deleted', label: 'Supprimé' }
+];
 
 const CompareModal: React.FC<{
   file: File;
@@ -42,7 +52,9 @@ const CompareModal: React.FC<{
   }, [file, fileType]);
 
   useEffect(() => {
-    contentEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (fileContent) {
+      contentEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [fileContent]);
 
   const compareData = async () => {
@@ -58,7 +70,7 @@ const CompareModal: React.FC<{
         }
       };
 
-      await simulateTyping(`Début de la comparaison avec ${fileType === 'image' ? 'une image' : 'un PDF'}...\n\n`);
+      await simulateTyping(`Comparison started with ${fileType === 'image' ? 'an image' : 'a PDF'}...\n\n`);
 
       const response = fileType === 'image' 
         ? await article.compareWithImage(articleData.id, file)
@@ -66,59 +78,35 @@ const CompareModal: React.FC<{
       
       setComparisonResult(response);
 
-      await simulateTyping(`Résultats de la comparaison :\n\n`);
+      await simulateTyping(`Comparison results:\n\n`);
       
-      // Affichage des différences pour chaque champ
-      await simulateTyping(`Titre:\n`);
-      await simulateTyping(`- Article: ${articleData.title}\n`);
-      await simulateTyping(`- ${fileType === 'image' ? 'Image' : 'PDF'}: ${response.extractedData?.title || 'Non trouvé'}\n`);
-      await simulateTyping(`→ ${response.titleMatch ? '✓ Correspond' : '✗ Différent'}\n\n`);
-      
-      await simulateTyping(`Description:\n`);
-      await simulateTyping(`- Article: ${articleData.description}\n`);
-      await simulateTyping(`- ${fileType === 'image' ? 'Image' : 'PDF'}: ${response.extractedData?.description || 'Non trouvé'}\n`);
-      await simulateTyping(`→ ${response.descriptionMatch ? '✓ Correspond' : '✗ Différent'}\n\n`);
-      
-      await simulateTyping(`Catégorie:\n`);
-      await simulateTyping(`- Article: ${articleData.category}\n`);
-      await simulateTyping(`- ${fileType === 'image' ? 'Image' : 'PDF'}: ${response.extractedData?.category || 'Non trouvé'}\n`);
-      await simulateTyping(`→ ${response.categoryMatch ? '✓ Correspond' : '✗ Différent'}\n\n`);
-      
-      await simulateTyping(`Sous-catégorie:\n`);
-      await simulateTyping(`- Article: ${articleData.subCategory}\n`);
-      await simulateTyping(`- ${fileType === 'image' ? 'Image' : 'PDF'}: ${response.extractedData?.subCategory || 'Non trouvé'}\n`);
-      await simulateTyping(`→ ${response.subCategoryMatch ? '✓ Correspond' : '✗ Différent'}\n\n`);
-      
-      await simulateTyping(`Prix d'achat:\n`);
-      await simulateTyping(`- Article: ${articleData.purchasePrice}\n`);
-      await simulateTyping(`- ${fileType === 'image' ? 'Image' : 'PDF'}: ${response.extractedData?.purchasePrice || 'Non trouvé'}\n`);
-      await simulateTyping(`→ ${response.purchasePriceMatch ? '✓ Correspond' : '✗ Différent'}\n\n`);
-      
-      await simulateTyping(`Prix de vente:\n`);
-      await simulateTyping(`- Article: ${articleData.salePrice}\n`);
-      await simulateTyping(`- ${fileType === 'image' ? 'Image' : 'PDF'}: ${response.extractedData?.salePrice || 'Non trouvé'}\n`);
-      await simulateTyping(`→ ${response.salePriceMatch ? '✓ Correspond' : '✗ Différent'}\n\n`);
-      
-      await simulateTyping(`Quantité en stock:\n`);
-      await simulateTyping(`- Article: ${articleData.quantityInStock}\n`);
-      await simulateTyping(`- ${fileType === 'image' ? 'Image' : 'PDF'}: ${response.extractedData?.quantityInStock || 'Non trouvé'}\n`);
-      await simulateTyping(`→ ${response.quantityInStockMatch ? '✓ Correspond' : '✗ Différent'}\n\n`);
-      
-      if (response.differences && response.differences.length > 0) {
-        await simulateTyping(`Détails des différences :\n`);
-        for (const diff of response.differences) {
-          await simulateTyping(`- ${diff.field}:\n`);
-          await simulateTyping(`  Article: ${diff.expected}\n`);
-          await simulateTyping(`  ${fileType === 'image' ? 'Image' : 'PDF'}: ${diff.actual}\n\n`);
+      if (response.comparison) {
+        await simulateTyping(`Title:\n`);
+        await simulateTyping(`- Article: ${articleData.title}\n`);
+        await simulateTyping(`- ${fileType === 'image' ? 'Image' : 'PDF'}: ${response.comparison.extractedData?.title || 'Not found'}\n`);
+        await simulateTyping(`→ ${response.comparison.matches.title ? '✓ Match' : '✗ Different'}\n\n`);
+        
+        await simulateTyping(`Description:\n`);
+        await simulateTyping(`- Article: ${articleData.description}\n`);
+        await simulateTyping(`- ${fileType === 'image' ? 'Image' : 'PDF'}: ${response.comparison.extractedData?.description || 'Not found'}\n`);
+        await simulateTyping(`→ ${response.comparison.matches.description ? '✓ Match' : '✗ Different'}\n\n`);
+        
+        if (response.comparison.fieldResults) {
+          await simulateTyping(`Field differences details:\n`);
+          for (const diff of response.comparison.fieldResults) {
+            await simulateTyping(`- ${diff.field}:\n`);
+            await simulateTyping(`  Article: ${diff.articleValue}\n`);
+            await simulateTyping(`  ${fileType === 'image' ? 'Image' : 'PDF'}: ${diff.extractedValue}\n\n`);
+          }
         }
       }
       
-      await simulateTyping(`Comparaison terminée.\n`);
+      await simulateTyping(`Comparison completed.\n`);
       
     } catch (error) {
-      console.error('Erreur de comparaison:', error);
-      setFileContent('Erreur lors de la comparaison');
-      toast.error('Erreur lors de la comparaison');
+      console.error('Comparison error:', error);
+      setFileContent('Error during comparison');
+      toast.error('Error during comparison');
     } finally {
       setIsProcessing(false);
     }
@@ -130,7 +118,7 @@ const CompareModal: React.FC<{
         <div className="flex-1 flex flex-col p-6 border-r">
           <DialogHeader className="mb-4">
             <DialogTitle>
-              {fileType === 'image' ? 'Aperçu de l\'image' : 'Aperçu du PDF'}
+              {fileType === 'image' ? 'Image Preview' : 'PDF Preview'}
             </DialogTitle>
           </DialogHeader>
           
@@ -139,7 +127,7 @@ const CompareModal: React.FC<{
               fileType === 'image' ? (
                 <img 
                   src={filePreview} 
-                  alt="Fichier uploadé" 
+                  alt="Uploaded file" 
                   className="max-h-full max-w-full object-contain"
                 />
               ) : (
@@ -168,30 +156,30 @@ const CompareModal: React.FC<{
               {isProcessing ? (
                 <>
                   <Spinner size="small" show={true} className="mr-2" />
-                  Traitement...
+                  Processing...
                 </>
               ) : (
-                'Comparer'
+                'Compare'
               )}
             </Button>
             <Button 
               variant="outline" 
               onClick={onClose}
             >
-              Annuler
+              Cancel
             </Button>
           </div>
         </div>
         
         <div className="flex-1 flex flex-col p-6">
           <DialogHeader className="mb-4">
-            <DialogTitle>Résultats de la comparaison</DialogTitle>
+            <DialogTitle>Comparison Results</DialogTitle>
           </DialogHeader>
           
           <div className="flex-1 bg-gray-50 rounded-lg p-4 overflow-y-auto whitespace-pre-wrap font-mono">
             {fileContent || (
               <div className="text-gray-400 italic">
-                {isProcessing ? 'Comparaison en cours...' : 'Aucune donnée à afficher'}
+                {isProcessing ? 'Comparison in progress...' : 'No data to display'}
               </div>
             )}
             <div ref={contentEndRef} />
@@ -212,12 +200,10 @@ const ArticleDetails: React.FC = () => {
   const [formData, setFormData] = useState<UpdateArticleDto>({
     title: '',
     description: '',
-    category: '',
-    subCategory: '',
-    purchasePrice: 0,
-    salePrice: 0,
+    reference: '',
     quantityInStock: 0,
-    status: 'active',
+    status: 'draft',
+    unitPrice: 0,
   });
   const [compareModalOpen, setCompareModalOpen] = useState(false);
   const [compareFile, setCompareFile] = useState<File | null>(null);
@@ -231,18 +217,16 @@ const ArticleDetails: React.FC = () => {
         const response = await article.findOne(Number(id));
         setArticleDetails(response);
         setFormData({
-          title: response.title,
-          description: response.description,
-          category: response.category,
-          subCategory: response.subCategory,
-          purchasePrice: response.purchasePrice,
-          salePrice: response.salePrice,
+          title: response.title || '',
+          description: response.description || '',
+          reference: response.reference,
           quantityInStock: response.quantityInStock,
           status: response.status,
+          unitPrice: response.unitPrice,
         });
       } catch (error) {
-        setError('Impossible de récupérer les détails de l\'article.');
-        toast.error('Erreur lors de la récupération des détails de l\'article.');
+        setError('Could not fetch article details');
+        toast.error('Error fetching article details');
       } finally {
         setLoading(false);
       }
@@ -253,26 +237,31 @@ const ArticleDetails: React.FC = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData((prevData) => ({
-      ...prevData,
-      [name]: name === 'purchasePrice' || name === 'salePrice' || name === 'quantityInStock'
+    setFormData(prev => ({
+      ...prev,
+      [name]: name === 'quantityInStock' || name === 'unitPrice'
         ? Number(value)
         : value,
     }));
   };
 
+  const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setFormData(prev => ({
+      ...prev,
+      status: e.target.value as ArticleStatus,
+    }));
+  };
+
   const toggleEditMode = () => {
-    setIsEditing((prev) => !prev);
-    if (isEditing) {
+    setIsEditing(prev => !prev);
+    if (isEditing && articleDetails) {
       setFormData({
-        title: articleDetails?.title || '',
-        description: articleDetails?.description || '',
-        category: articleDetails?.category || '',
-        subCategory: articleDetails?.subCategory || '',
-        purchasePrice: articleDetails?.purchasePrice || 0,
-        salePrice: articleDetails?.salePrice || 0,
-        quantityInStock: articleDetails?.quantityInStock || 0,
-        status: articleDetails?.status || 'active',
+        title: articleDetails.title || '',
+        description: articleDetails.description || '',
+        reference: articleDetails.reference,
+        quantityInStock: articleDetails.quantityInStock,
+        status: articleDetails.status,
+        unitPrice: articleDetails.unitPrice,
       });
     }
   };
@@ -280,30 +269,27 @@ const ArticleDetails: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const payload = {
+      const payload: UpdateArticleDto = {
         ...formData,
-        purchasePrice: Number(formData.purchasePrice),
-        salePrice: Number(formData.salePrice),
         quantityInStock: Number(formData.quantityInStock),
+        unitPrice: Number(formData.unitPrice),
       };
 
       const updatedArticle = await api.article.update(Number(id), payload);
       setArticleDetails(updatedArticle);
       setFormData({
-        title: updatedArticle.title,
-        description: updatedArticle.description,
-        category: updatedArticle.category,
-        subCategory: updatedArticle.subCategory,
-        purchasePrice: updatedArticle.purchasePrice,
-        salePrice: updatedArticle.salePrice,
+        title: updatedArticle.title || '',
+        description: updatedArticle.description || '',
+        reference: updatedArticle.reference,
         quantityInStock: updatedArticle.quantityInStock,
         status: updatedArticle.status,
+        unitPrice: updatedArticle.unitPrice,
       });
       setIsEditing(false);
-      toast.success('Article mis à jour avec succès');
+      toast.success('Article updated successfully');
     } catch (error) {
-      console.error('Erreur lors de la mise à jour de l\'article:', error);
-      toast.error('Erreur lors de la mise à jour de l\'article.');
+      console.error('Error updating article:', error);
+      toast.error('Error updating article');
     }
   };
 
@@ -339,7 +325,7 @@ const ArticleDetails: React.FC = () => {
 
   if (loading) return <Spinner size="medium" show={loading} />;
   if (error) return <p className="text-red-500">{error}</p>;
-  if (!articleDetails) return <p>Aucun article trouvé.</p>;
+  if (!articleDetails) return <p>No article found</p>;
 
   return (
     <div className="p-6 bg-white rounded-lg shadow-sm">
@@ -357,7 +343,7 @@ const ArticleDetails: React.FC = () => {
       )}
 
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold">Détails de l'article</h1>
+        <h1 className="text-2xl font-semibold">Article Details</h1>
         <div className="flex gap-2">
           <Button 
             variant="outline" 
@@ -365,7 +351,7 @@ const ArticleDetails: React.FC = () => {
             onClick={handleCompareWithPdf}
           >
             <FileText className="h-4 w-4" />
-            Comparer avec PDF
+            Compare with PDF
           </Button>
           
           <Button 
@@ -374,7 +360,7 @@ const ArticleDetails: React.FC = () => {
             onClick={handleCompareWithImage}
           >
             <Image className="h-4 w-4" />
-            Comparer avec Image
+            Compare with Image
           </Button>
 
           <Button
@@ -385,12 +371,12 @@ const ArticleDetails: React.FC = () => {
             {isEditing ? (
               <>
                 <X className="h-4 w-4" />
-                Annuler
+                Cancel
               </>
             ) : (
               <>
                 <Edit className="h-4 w-4" />
-                Modifier
+                Edit
               </>
             )}
           </Button>
@@ -403,7 +389,7 @@ const ArticleDetails: React.FC = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="title">Titre</Label>
+                  <Label htmlFor="title">Title</Label>
                   <Input
                     id="title"
                     name="title"
@@ -425,22 +411,11 @@ const ArticleDetails: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="category">Catégorie</Label>
+                  <Label htmlFor="reference">Reference</Label>
                   <Input
-                    id="category"
-                    name="category"
-                    value={formData.category}
-                    onChange={handleInputChange}
-                    readOnly={!isEditing}
-                    className={!isEditing ? 'bg-gray-100' : ''}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="subCategory">Sous-catégorie</Label>
-                  <Input
-                    id="subCategory"
-                    name="subCategory"
-                    value={formData.subCategory}
+                    id="reference"
+                    name="reference"
+                    value={formData.reference}
                     onChange={handleInputChange}
                     readOnly={!isEditing}
                     className={!isEditing ? 'bg-gray-100' : ''}
@@ -449,31 +424,19 @@ const ArticleDetails: React.FC = () => {
               </div>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="purchasePrice">Prix d'achat</Label>
+                  <Label htmlFor="unitPrice">Unit Price</Label>
                   <Input
-                    id="purchasePrice"
-                    name="purchasePrice"
+                    id="unitPrice"
+                    name="unitPrice"
                     type="number"
-                    value={formData.purchasePrice}
+                    value={formData.unitPrice}
                     onChange={handleInputChange}
                     readOnly={!isEditing}
                     className={!isEditing ? 'bg-gray-100' : ''}
                   />
                 </div>
                 <div>
-                  <Label htmlFor="salePrice">Prix de vente</Label>
-                  <Input
-                    id="salePrice"
-                    name="salePrice"
-                    type="number"
-                    value={formData.salePrice}
-                    onChange={handleInputChange}
-                    readOnly={!isEditing}
-                    className={!isEditing ? 'bg-gray-100' : ''}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="quantityInStock">Quantité en stock</Label>
+                  <Label htmlFor="quantityInStock">Quantity in Stock</Label>
                   <Input
                     id="quantityInStock"
                     name="quantityInStock"
@@ -485,23 +448,44 @@ const ArticleDetails: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="status">Statut</Label>
-                  <Input
-                    id="status"
-                    name="status"
-                    value={formData.status}
-                    onChange={handleInputChange}
-                    readOnly={!isEditing}
-                    className={!isEditing ? 'bg-gray-100' : ''}
-                  />
-                </div>
+  <Label htmlFor="status">Status</Label>
+  {isEditing ? (
+    <select
+      id="status"
+      name="status"
+      value={formData.status}
+      onChange={handleStatusChange}
+      className="w-full p-2 border rounded-full bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+    >
+      {statusOptions.map(option => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  ) : (
+    <div className="px-4 py-2 rounded-full bg-gray-100 inline-flex items-center">
+      <span className="h-2 w-2 rounded-full mr-2" style={{
+        backgroundColor: 
+          formData.status === 'draft' ? '#6b7280' :
+          formData.status === 'active' ? '#10b981' :
+          formData.status === 'inactive' ? '#ef4444' :
+          formData.status === 'archived' ? '#8b5cf6' :
+          formData.status === 'out_of_stock' ? '#f59e0b' :
+          formData.status === 'pending_review' ? '#3b82f6' :
+          '#9ca3af'
+      }}></span>
+      {statusOptions.find(opt => opt.value === formData.status)?.label || formData.status}
+    </div>
+  )}
+</div>
               </div>
             </div>
             {isEditing && (
               <div className="flex justify-end">
                 <Button type="submit" className="flex items-center gap-2">
                   <Save className="h-4 w-4" />
-                  Valider
+                  Save
                 </Button>
               </div>
             )}

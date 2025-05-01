@@ -13,6 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/components/common/Spinner';
 import { useBreadcrumb } from '@/components/layout/BreadcrumbContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { FileText, Image, Files } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { FileUploader } from '@/components/ui/file-uploader';
 
 const ExtractFromFileModal: React.FC<{
   file: File;
@@ -79,13 +82,11 @@ const ExtractFromFileModal: React.FC<{
       await simulateTyping(`${t('article.extraction.results')}\n\n`);
       
       await simulateTyping(`${t('article.attributes.title')}: ${data.title || '-'}\n`);
-      await simulateTyping(`${t('article.attributes.description')}: ${data.description || '-'}\n`);
-      await simulateTyping(`${t('article.attributes.category')}: ${data.category || '-'}\n`);
-      await simulateTyping(`${t('article.attributes.sub_category')}: ${data.subCategory || '-'}\n`);
-      await simulateTyping(`${t('article.attributes.purchase_price')}: ${data.purchasePrice || 0}\n`);
-      await simulateTyping(`${t('article.attributes.sale_price')}: ${data.salePrice || 0}\n`);
-      await simulateTyping(`${t('article.attributes.quantity_in_stock')}: ${data.quantityInStock || 0}\n`);
+      await simulateTyping(`${t('article.attributes.reference')}: ${data.reference || '-'}\n`);
+      await simulateTyping(`${t('article.attributes.unitPrice')}: ${data.unitPrice || 0}\n`);
+      await simulateTyping(`${t('article.attributes.quantityInStock')}: ${data.quantityInStock || 0}\n`);
       await simulateTyping(`${t('article.attributes.status')}: ${data.status || 'active'}\n`);
+      await simulateTyping(`${t('article.attributes.notes')}: ${data.notes || '-'}\n`);
       
       await simulateTyping(`\n${t('article.extraction.complete')}`);
       
@@ -254,57 +255,29 @@ const CreateArticle: React.FC = () => {
   const [formData, setFormData] = useState<CreateArticleDto>({
     title: '',
     description: '',
-    category: '',
-    subCategory: '',
-    purchasePrice: 0,
-    salePrice: 0,
+    reference: '',
+    unitPrice: 0,
     quantityInStock: 0,
     status: 'active',
+    notes: '',
   });
 
   const [loading, setLoading] = useState(false);
   const [fileLoading, setFileLoading] = useState<'image' | 'pdf' | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [allCategories, setAllCategories] = useState<string[]>([]);
-  const [allSubCategories, setAllSubCategories] = useState<string[]>([]);
-  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-  const [showSubCategoryDropdown, setShowSubCategoryDropdown] = useState(false);
-  const [filteredCategories, setFilteredCategories] = useState<string[]>([]);
-  const [filteredSubCategories, setFilteredSubCategories] = useState<string[]>([]);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [fileType, setFileType] = useState<'image' | 'pdf'>('image');
   const [extractionModalOpen, setExtractionModalOpen] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [justificatifFile, setJustificatifFile] = useState<File | null>(null);
 
   useEffect(() => {
     setRoutes([
       { title: tCommon('menu.inventory'), href: '/article/article-Lists' },
       { title: tCommon('submenu.articles'), href: '/article/article-Lists' },
-      { title: tCommon('create') },
+      { title: tCommon('commands.create') },
     ]);
   }, [router.locale, tCommon, setRoutes]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [categories, subCategories] = await Promise.all([
-          article.getAllCategories(),
-          article.getAllSubCategories()
-        ]);
-        setAllCategories(categories);
-        setFilteredCategories(categories);
-        setAllSubCategories(subCategories);
-        setFilteredSubCategories(subCategories);
-      } catch (error) {
-        console.error('Error loading data:', error);
-        toast.error(tArticle('article.error.loading_data'));
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [tArticle]);
 
   const handleImageUpload = () => {
     const input = document.createElement('input');
@@ -350,75 +323,33 @@ const CreateArticle: React.FC = () => {
     input.click();
   };
 
+  const handleJustificatifChange = (files: File[]) => {
+    if (files.length > 0) {
+      setJustificatifFile(files[0]);
+      toast.success(tArticle('article.justificatif_uploaded'));
+    } else {
+      setJustificatifFile(null);
+    }
+  };
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: ['purchasePrice', 'salePrice', 'quantityInStock'].includes(name) 
+      [name]: ['unitPrice', 'quantityInStock'].includes(name) 
         ? Number(value) 
         : value
     }));
-
-    if (name === 'category') {
-      const filtered = allCategories.filter(cat =>
-        cat.toLowerCase().includes(value.toLowerCase())
-      );
-      setFilteredCategories(filtered);
-      setShowCategoryDropdown(true);
-    }
-
-    if (name === 'subCategory') {
-      const filtered = allSubCategories.filter(subCat =>
-        subCat.toLowerCase().includes(value.toLowerCase())
-      );
-      setFilteredSubCategories(filtered);
-      setShowSubCategoryDropdown(true);
-    }
   };
-
-  const selectCategory = (category: string) => {
-    setFormData(prev => ({ 
-      ...prev, 
-      category,
-      subCategory: ''
-    }));
-    setShowCategoryDropdown(false);
-    
-    const filtered = allSubCategories.filter(subCat => 
-      subCat.includes(' > ') 
-        ? subCat.startsWith(`${category} > `) 
-        : true
-    );
-    
-    setFilteredSubCategories(filtered);
-    setShowSubCategoryDropdown(filtered.length > 0);
-  };
-
-  const selectSubCategory = (subCategory: string) => {
-    setFormData(prev => ({ ...prev, subCategory }));
-    setShowSubCategoryDropdown(false);
-  };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest('.category-dropdown') && !target.closest('.subcategory-dropdown')) {
-        setShowCategoryDropdown(false);
-        setShowSubCategoryDropdown(false);
-      }
-    };
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, []);
 
   const validateForm = () => {
-    if (!formData.title.trim()) {
-      setError(tArticle('article.validation.title_required'));
+    if (!formData.reference.trim()) {
+      setError(tArticle('article.validation.reference_required'));
       return false;
     }
-    if ([formData.salePrice, formData.purchasePrice, formData.quantityInStock].some(v => v < 0)) {
+    if (formData.unitPrice < 0 || formData.quantityInStock < 0) {
       setError(tArticle('article.validation.invalid_number'));
       return false;
     }
@@ -431,7 +362,12 @@ const CreateArticle: React.FC = () => {
     setLoading(true);
     
     try {
-      const result = await api.article.create(formData);
+      const formDataToSend = {
+        ...formData,
+        justificatifFile: justificatifFile || undefined
+      };
+
+      const result = await api.article.create(formDataToSend);
       if (result) {
         toast.success(tArticle('article.action_create_success'));
         router.push('/article/article-Lists');
@@ -458,18 +394,14 @@ const CreateArticle: React.FC = () => {
     setFormData({
       title: '',
       description: '',
-      category: '',
-      subCategory: '',
-      purchasePrice: 0,
-      salePrice: 0,
+      reference: '',
+      unitPrice: 0,
       quantityInStock: 0,
       status: 'active',
+      notes: '',
     });
+    setJustificatifFile(null);
     setError(null);
-    setShowCategoryDropdown(false);
-    setShowSubCategoryDropdown(false);
-    setFilteredCategories(allCategories);
-    setFilteredSubCategories(allSubCategories);
   };
 
   return (
@@ -497,7 +429,7 @@ const CreateArticle: React.FC = () => {
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowConfirmation(false)}>
-              {tCommon('cancel')}
+              {tCommon('commands.cancel')}
             </Button>
             <Button 
               onClick={handleConfirmCreate}
@@ -506,10 +438,10 @@ const CreateArticle: React.FC = () => {
               {loading ? (
                 <>
                   <Spinner size="small" show={true} className="mr-2" />
-                  {tCommon('creating')}
+                  {tCommon('commands.creating')}
                 </>
               ) : (
-                tCommon('confirm')
+                tCommon('commands.confirm')
               )}
             </Button>
           </DialogFooter>
@@ -517,30 +449,42 @@ const CreateArticle: React.FC = () => {
       </Dialog>
 
       <Card>
-        <CardHeader className="flex justify-between items-start">
-          <div>
-            <CardTitle>{tArticle('Créer un article')}</CardTitle>
-            <CardDescription>{tArticle('')}</CardDescription>
-          </div>
-          <div className="flex gap-2">
-            <Button 
-              onClick={handleImageUpload}
-              disabled={!!fileLoading}
-              variant="outline"
-              size="sm"
-            >
-              {fileLoading === 'image' && <Spinner size="small" show={true} className="mr-2" />}
-              {tArticle('télécharger image')}
-            </Button>
-            <Button 
-              onClick={handlePdfUpload}
-              disabled={!!fileLoading}
-              variant="outline"
-              size="sm"
-            >
-              {fileLoading === 'pdf' && <Spinner size="small" show={true} className="mr-2" />}
-              {tArticle('télécharger pdf')}
-            </Button>
+        <CardHeader>
+          <div className="flex justify-between items-center w-full">
+            <div>
+              <CardTitle>{tArticle('Créer un article')}</CardTitle>
+              <CardDescription>{tArticle('Remplissez les détails du nouvel article')}</CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                onClick={handleImageUpload}
+                disabled={!!fileLoading}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                {fileLoading === 'image' ? (
+                  <Spinner size="small" show={true} />
+                ) : (
+                  <Image className="h-4 w-4" />
+                )}
+                {tArticle('Extraire depuis image')}
+              </Button>
+              <Button 
+                onClick={handlePdfUpload}
+                disabled={!!fileLoading}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                {fileLoading === 'pdf' ? (
+                  <Spinner size="small" show={true} />
+                ) : (
+                  <FileText className="h-4 w-4" />
+                )}
+                {tArticle('Extraire depuis PDF')}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -555,7 +499,6 @@ const CreateArticle: React.FC = () => {
                     value={formData.title}
                     onChange={handleChange}
                     placeholder={tArticle('Titre de l\'article')}
-                    required
                   />
                 </div>
 
@@ -571,119 +514,35 @@ const CreateArticle: React.FC = () => {
                   />
                 </div>
 
-                <div className="relative">
-                  <Label htmlFor="category">{tArticle('category')}</Label>
-                  <div className="relative">
-                    <Input
-                      id="category"
-                      name="category"
-                      value={formData.category}
-                      onChange={handleChange}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowCategoryDropdown(true);
-                        setShowSubCategoryDropdown(false);
-                      }}
-                      placeholder={tArticle('category de l\'article')}
-                    />
-                    {showCategoryDropdown && (
-                      <div className="category-dropdown absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
-                        {filteredCategories.map((category, index) => (
-                          <div
-                            key={index}
-                            className={`px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center ${
-                              category === formData.category ? 'bg-blue-50' : ''
-                            }`}
-                            onClick={() => selectCategory(category)}
-                          >
-                            <span className="mr-2">📁</span>
-                            <span className="font-medium">{category}</span>
-                            {category === formData.category && (
-                              <span className="ml-auto text-green-500">✓</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="relative">
-                  <Label htmlFor="subCategory">{tArticle('Sous category')}</Label>
-                  <div className="relative">
-                    <Input
-                      id="subCategory"
-                      name="subCategory"
-                      value={formData.subCategory}
-                      onChange={handleChange}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (formData.category) {
-                          setShowSubCategoryDropdown(true);
-                          setShowCategoryDropdown(false);
-                        } else {
-                          toast.warning(tArticle('article.select_category_first'));
-                        }
-                      }}
-                      placeholder={
-                        formData.category 
-                          ? tArticle('sous category de l\'article')
-                          : tArticle('séléctionner une catégorie')
-                      }
-                      disabled={!formData.category}
-                    />
-                    {showSubCategoryDropdown && formData.category && (
-                      <div className="subcategory-dropdown absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
-                        {filteredSubCategories.map((subCategory, index) => (
-                          <div
-                            key={index}
-                            className={`px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center ${
-                              subCategory === formData.subCategory ? 'bg-blue-50' : ''
-                            }`}
-                            onClick={() => selectSubCategory(subCategory)}
-                          >
-                            <span className="mr-2">📂</span>
-                            <span className="font-medium">{subCategory}</span>
-                            {subCategory === formData.subCategory && (
-                              <span className="ml-auto text-green-500">✓</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                <div>
+                  <Label htmlFor="reference">{tArticle('Référence')} *</Label>
+                  <Input
+                    id="reference"
+                    name="reference"
+                    value={formData.reference}
+                    onChange={handleChange}
+                    placeholder={tArticle('Référence de l\'article')}
+                    required
+                  />
                 </div>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="purchasePrice">{tArticle('prix d\'achat')}</Label>
+                  <Label htmlFor="unitPrice">{tArticle('Prix unitaire')}</Label>
                   <Input
-                    id="purchasePrice"
-                    name="purchasePrice"
+                    id="unitPrice"
+                    name="unitPrice"
                     type="number"
                     min="0"
-                    value={formData.purchasePrice}
+                    value={formData.unitPrice}
                     onChange={handleChange}
-                    placeholder={tArticle('prix d\'achat')}
+                    placeholder={tArticle('Prix unitaire')}
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="salePrice">{tArticle('prix de vente')}</Label>
-                  <Input
-                    id="salePrice"
-                    name="salePrice"
-                    type="number"
-                    min="0"
-                    value={formData.salePrice}
-                    onChange={handleChange}
-                    placeholder={tArticle('prix de vente')}
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="quantityInStock">{tArticle('quantité en stock')}</Label>
+                  <Label htmlFor="quantityInStock">{tArticle('Quantité en stock')}</Label>
                   <Input
                     id="quantityInStock"
                     name="quantityInStock"
@@ -691,28 +550,72 @@ const CreateArticle: React.FC = () => {
                     min="0"
                     value={formData.quantityInStock}
                     onChange={handleChange}
-                    placeholder={tArticle('quantité en stock')}
+                    placeholder={tArticle('Quantité en stock')}
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="status">{tArticle('status')}</Label>
+                  <Label htmlFor="status">{tArticle('Statut')}</Label>
                   <Select
                     name="status"
                     value={formData.status}
                     onValueChange={(value) => setFormData({ ...formData, status: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={tArticle('status_placeholder')} />
+                      <SelectValue placeholder={tArticle('Sélectionner un statut')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="active">{tArticle('active')}</SelectItem>
-                      <SelectItem value="inactive">{tArticle('inactive')}</SelectItem>
-                      <SelectItem value="pending">{tArticle('pending')}</SelectItem>
+                      <SelectItem value="draft">{tArticle('Brouillon')}</SelectItem>
+                      <SelectItem value="active">{tArticle('Actif')}</SelectItem>
+                      <SelectItem value="inactive">{tArticle('Inactif')}</SelectItem>
+                      <SelectItem value="archived">{tArticle('Archivé')}</SelectItem>
+                      <SelectItem value="out_of_stock">{tArticle('Rupture de stock')}</SelectItem>
+                      <SelectItem value="pending_review">{tArticle('En attente de revue')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+
+                <Accordion type="single" collapsible className="w-full border rounded-lg">
+                  <AccordionItem value="justificatif">
+                    <AccordionTrigger className="px-4 hover:no-underline">
+                      <div className="flex items-center gap-2">
+                        <Files className="h-4 w-4" />
+                        <Label className="font-normal">{tArticle('Justificatif')}</Label>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4 pb-4">
+                      <FileUploader
+                        accept={{
+                          'image/*': [],
+                          'application/pdf': [],
+                          'application/vnd.openxmlformats-officedocument.wordprocessingml.document': [],
+                          'application/msword': [],
+                        }}
+                        maxFileCount={1}
+                        value={justificatifFile ? [justificatifFile] : []}
+                        onValueChange={handleJustificatifChange}
+                      />
+                      {justificatifFile && (
+                        <div className="mt-2 text-sm text-muted-foreground">
+                          {tArticle('Fichier sélectionné')}: {justificatifFile.name}
+                        </div>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
               </div>
+            </div>
+
+            <div>
+              <Label htmlFor="notes">{tArticle('Notes')}</Label>
+              <Textarea
+                id="notes"
+                name="notes"
+                value={formData.notes}
+                onChange={handleChange}
+                placeholder={tArticle('Notes supplémentaires')}
+                rows={3}
+              />
             </div>
 
             {error && <div className="text-red-500 text-sm col-span-2">{error}</div>}
@@ -722,10 +625,10 @@ const CreateArticle: React.FC = () => {
                 {loading ? (
                   <>
                     <Spinner size="small" show={true} className="mr-2" />
-                    {tCommon('creating')}
+                    {tCommon('commands.creating')}
                   </>
                 ) : (
-                  tCommon('create')
+                  tCommon('commands.create')
                 )}
               </Button>
               <Button type="button" variant="secondary" onClick={handleReset}>

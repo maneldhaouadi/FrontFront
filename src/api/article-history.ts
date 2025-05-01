@@ -22,19 +22,48 @@ const createHistoryEntry = async (
 };
 
 /**
- * Récupère l'historique d'un article.
- * @param articleId - L'ID de l'article.
- * @returns La liste des entrées d'historique.
+ * Supprime une version spécifique d'un article et ajuste les versions suivantes
+ * @param articleId - L'ID de l'article
+ * @param version - Le numéro de version à supprimer
+ * @returns Promise<void>
  */
+const deleteVersion = async (articleId: number, version: number): Promise<void> => {
+  try {
+    await axios.delete(`/public/article-history/${articleId}/version/${version}`);
+  } catch (error) {
+    console.error("Erreur lors de la suppression de la version:", error);
+    throw new Error(`Impossible de supprimer la version ${version} de l'article ${articleId}`);
+  }
+};
+
 const getArticleHistory = async (articleId: number): Promise<ResponseArticleHistoryDto[]> => {
   try {
-    const response = await axios.get<ResponseArticleHistoryDto[]>(
-      `/public/article-history/${articleId}/history`,
-    );
-    return response.data;
+    const { data } = await axios.get(`/public/article-history/${articleId}/history`);
+    return data || [];
   } catch (error) {
-    console.error("Erreur lors de la récupération de l'historique de l'article:", error);
-    throw new Error("Impossible de récupérer l'historique de l'article.");
+    console.error('Failed to fetch history:', error);
+    throw new Error('Failed to load article history');
+  }
+};
+
+const downloadPdf = async (articleId: number, version: number): Promise<void> => {
+  try {
+    const response = await axios.get(
+      `/public/article-history/${articleId}/version/${version}/download-pdf`,
+      { responseType: 'blob' }
+    );
+    
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `article_${articleId}_v${version}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('PDF download failed:', error);
+    throw new Error('PDF download failed');
   }
 };
 
@@ -55,40 +84,10 @@ const generatePdf = async (articleId: number): Promise<string> => {
   }
 };
 
-
-/**
- * Télécharge le fichier PDF pour une version spécifique d'un article.
- * @param articleId - L'ID de l'article.
- * @param version - La version de l'article.
- * @returns Le fichier PDF téléchargé.
- */
-const downloadPdf = async (articleId: number, version: number): Promise<void> => {
-  try {
-    const response = await axios.get(`/public/article-history/${articleId}/version/${version}/download-pdf`, {
-      responseType: 'blob', // Indique que la réponse est un fichier binaire (Blob)
-    });
-
-    // Créer un lien pour télécharger le fichier
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `article_${articleId}_version_${version}.pdf`); // Nom du fichier
-    document.body.appendChild(link);
-    link.click();
-
-    // Nettoyer le lien après le téléchargement
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-  } catch (error) {
-    console.error("Erreur lors du téléchargement du PDF:", error);
-    throw new Error("Impossible de télécharger le PDF.");
-  }
-};
-
-
 export const articleHistory = {
   createHistoryEntry,
   getArticleHistory,
   generatePdf,
   downloadPdf,
+  deleteVersion, // Ajout de la nouvelle fonction
 };
