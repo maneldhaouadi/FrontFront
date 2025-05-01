@@ -1,7 +1,7 @@
 'use client';
 
 import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import StarterKit from '@tiptap/starter-kit';
 import TextStyle from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
@@ -14,19 +14,73 @@ import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { common, createLowlight } from 'lowlight';
-import { FaTrash, FaBold, FaItalic, FaUnderline, FaAlignLeft, FaAlignCenter, FaAlignRight, FaListUl, FaListOl, FaLink, FaTable, FaCode, FaSave, FaUndo, FaRedo, FaPalette, FaFont } from 'react-icons/fa';
+import { FaTrash, FaBold, FaItalic, FaUnderline, FaAlignLeft, FaAlignCenter, FaAlignRight, FaListUl, FaListOl, FaLink, FaTable, FaCode, FaSave, FaUndo, FaRedo, FaPalette, FaFont, FaImage, FaUpload } from 'react-icons/fa';
 import { BiUndo, BiRedo } from 'react-icons/bi';
 import { TemplateFieldsPanel } from './TemplateFielsPanel';
 import { ChevronDown } from 'lucide-react';
+import { Template, TemplateType, TemplateTypeValues } from '@/types/template';
+import { templateApi } from '@/api';
+import Image from '@tiptap/extension-image'; 
+
+
 
 
 const lowlight = createLowlight(common);
+
+
+
+// Extension Image personnalisée avec redimensionnement
+const CustomImage = Image.extend({
+  addAttributes() {
+    return {
+      src: {
+        default: null,
+      },
+      alt: {
+        default: null,
+      },
+      title: {
+        default: null,
+      },
+      width: {
+        default: null,
+        renderHTML: attributes => ({
+          width: attributes.width
+        })
+      },
+      height: {
+        default: null,
+        renderHTML: attributes => ({
+          height: attributes.height
+        })
+      },
+      style: {
+        default: 'display: inline-block; position: relative;',
+        renderHTML: attributes => ({
+          style: attributes.style
+        })
+      }
+    }
+  },
+  renderHTML({ HTMLAttributes }) {
+    return [
+      'div', 
+      { 
+        class: 'resizable-image-container',
+        style: HTMLAttributes.style
+      },
+      ['img', HTMLAttributes],
+      ['div', { class: 'resize-handle' }]
+    ]
+  }
+});
+
 
 interface TiptapEditorProps {
   value: string;
   onChange: (content: string) => void;
   templateId?: number;
-  templateData?: any;
+  templateData?: Template;
   onSaveComplete?: () => void;
   onLoad?: () => void;
 }
@@ -43,23 +97,71 @@ export default function TiptapEditor({
   const [showLinkMenu, setShowLinkMenu] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [showTablePopup, setShowTablePopup] = useState(false);
+
   const [tableSize, setTableSize] = useState({
     rows: 1,
     cols: 1,
   });
+  const [documentType, setDocumentType] = useState<TemplateType>(() => {
+    if (templateData?.type) {
+      const normalizedType = templateData.type.toLowerCase();
+      if (Object.values(TemplateType).includes(normalizedType as TemplateType)) {
+        return normalizedType as TemplateType;
+      }
+    }
+    
+    if (templateId) {
+      templateApi.getById(templateId)
+        .then(template => {
+          if (template?.type) {
+            setDocumentType(template.type);
+          }
+        })
+        .catch(console.error);
+    }
+    
+    return TemplateType.QUOTATION;
+  });
 
-  const editor = useEditor({
+  // États pour le redimensionnement d'image
+  const [resizing, setResizing] = useState(false);
+const [startSize, setStartSize] = useState({ 
+  width: 0, 
+  height: 0, 
+  x: 0, 
+  y: 0 
+});
+const [currentImage, setCurrentImage] = useState<HTMLElement | null>(null);
+const editorRef = useRef<HTMLDivElement>(null);
+
+
+
+  
+
+const editor = useEditor({
     extensions: [
       StarterKit.configure({
         heading: {
           levels: [1, 2, 3],
         },
         codeBlock: false,
+        bulletList: {
+          HTMLAttributes: {
+            class: 'list-disc pl-5',
+          },
+        },
+        orderedList: {
+          HTMLAttributes: {
+            class: 'list-decimal pl-5',
+          },
+        },
       }),
       TextStyle,
       Color,
       TextAlign.configure({
-        types: ['heading', 'paragraph'],
+        types: ['heading', 'paragraph', 'image'],
+        alignments: ['left', 'center', 'right', 'justify'],
+        defaultAlignment: 'left'
       }),
       Underline,
       Link.configure({
@@ -86,6 +188,13 @@ export default function TiptapEditor({
           class: 'border border-gray-800 bg-gray-100 font-bold p-2',
         },
       }),
+      CustomImage.configure({
+        inline: true,
+        allowBase64: true,
+        HTMLAttributes: {
+          class: 'resizable-image-container', // Changé de 'resizable-image'
+        },
+      })
     ],
     content: value,
     onUpdate: ({ editor }) => {
@@ -98,27 +207,126 @@ export default function TiptapEditor({
       },
     },
   });
+
+  // Gestion du redimensionnement d'image
+  useEffect(() => {
+    if (!editor) return;
+
+
+    
+  
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.classList.contains('resize-handle')) {
+        e.preventDefault();
+        const container = target.closest('.resizable-image-container') as HTMLElement;
+        if (container) {
+          const img = container.querySelector('img');
+          if (img) {
+            setResizing(true);
+            setCurrentImage(container);
+            setStartSize({
+              width: img.offsetWidth,
+              height: img.offsetHeight,
+              x: e.clientX,
+              y: e.clientY
+            });
+            document.body.style.cursor = 'nwse-resize';
+            document.body.style.userSelect = 'none';
+            container.classList.add('resizing');
+          }
+        }
+      }
+    };
+  
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizing || !currentImage) return;
+      
+      const img = currentImage.querySelector('img');
+      if (!img) return;
+      
+      const deltaX = e.clientX - startSize.x;
+      const deltaY = e.clientY - startSize.y;
+      
+      let newWidth = startSize.width + deltaX;
+      let newHeight = startSize.height + deltaY;
+      
+      // Contraintes de taille
+      newWidth = Math.max(50, newWidth);
+      newHeight = Math.max(50, newHeight);
+      
+      img.style.width = `${newWidth}px`;
+      img.style.height = `${newHeight}px`;
+    };
+  
+    const handleMouseUp = () => {
+      if (!resizing || !currentImage) return;
+      
+      const img = currentImage.querySelector('img');
+      if (img) {
+        editor.commands.updateAttributes('image', {
+          width: img.style.width,
+          height: img.style.height
+        });
+      }
+      
+      currentImage.classList.remove('resizing');
+      setResizing(false);
+      setCurrentImage(null);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizing, startSize, currentImage, editor]);
+
+
+ const handleImageUpload = useCallback(
+  (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !editor) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const imageUrl = e.target?.result as string;
+      editor.chain().focus().setImage({ 
+        src: imageUrl,
+        width: '300px', // Taille initiale
+        height: 'auto',
+        style: 'display: inline-block; position: relative;'
+      }).run();
+    };
+    reader.readAsDataURL(file);
+  },
+  [editor]
+);
+
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [currentColor, setCurrentColor] = useState('#000000');
-  const [colorType, setColorType] = useState<'text'|'background'>('text');
   const colorPalette = [
     '#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff',
     '#ffff00', '#00ffff', '#ff00ff', '#c0c0c0', '#808080',
     '#800000', '#808000', '#008000', '#800080', '#008080', '#000080'
   ];
 
-// Dans votre composant TiptapEditor
-
-
   const applyColor = useCallback(() => {
     if (!editor) return;
     editor.chain().focus().setColor(currentColor).run();
     setShowColorPicker(false);
   }, [editor, currentColor]);
+
   const handleHoverTableSize = (rows: number, cols: number) => {
     setTableSize({
-      rows,
-      cols,
+      rows: Math.min(rows, 9),  // Limite à 9 lignes
+      cols: Math.min(cols, 9),  // Limite à 9 colonnes
     });
   };
 
@@ -153,19 +361,20 @@ export default function TiptapEditor({
     }
   }, [editor, onChange, onSaveComplete]);
 
- // Dans votre composant TiptapEditor
- const insertDynamicField = useCallback((fieldPath: string) => {
-  if (!editor) return;
-  
-  // Crée un span avec un attribut data-dynamic pour identifier les champs variables
-  const html = `<span class="dynamic-field" data-dynamic="${fieldPath}">{{${fieldPath}}}</span>`;
-  
-  // Insère le contenu à la position actuelle du curseur
-  editor.commands.insertContent(html);
-  
-  // Ferme le menu des variables
-  setShowVariableMenu(false);
-}, [editor]);
+  const insertDynamicField = useCallback((fieldPath: string, fieldType: 'invoice' | 'quotation' | 'payment') => {
+    if (!editor) return;
+    
+    if (fieldPath.match(/<%=|{%/)) {
+      editor.commands.insertContent(fieldPath);
+    } else if (fieldPath.includes('{{')) {
+      const convertedField = fieldPath.replace(/\{\{(.+?)\}\}/g, `<%= ${fieldType}.$1 %>`);
+      editor.commands.insertContent(convertedField);
+    } else {
+      editor.commands.insertContent(`<%= ${fieldType}.${fieldPath} %>`);
+    }
+    
+    setShowVariableMenu(false);
+  }, [editor]);
 
   const setLink = useCallback(() => {
     if (!editor) return;
@@ -188,22 +397,21 @@ export default function TiptapEditor({
   ];
 
   useEffect(() => {
-    if (onLoad) {
-      onLoad();
+    if (templateData?.type) {
+      const normalizedType = templateData.type.toLowerCase();
+      if (Object.values(TemplateType).includes(normalizedType as TemplateType)) {
+        setDocumentType(normalizedType as TemplateType);
+      }
     }
-  }, [onLoad]);
+  }, [templateData]);
 
   if (!editor) {
     return <div className="p-4 text-center">Loading editor...</div>;
   }
 
   return (
-    <div className="border rounded-lg overflow-hidden bg-white shadow-sm">
-     <div className="flex flex-wrap items-center gap-1 p-2 border-b bg-gray-50">
-      {/* Boutons Undo/Redo style Word - Nouveaux éléments ajoutés en premier */}
-      
-      </div>
-            <style jsx>{`
+<div className="border rounded-lg overflow-hidden bg-white shadow-sm flex flex-col" style={{ height: '80vh' }}>
+      <style jsx global>{`
         .tiptap-editor {
           padding: 1rem;
           min-height: 700px;
@@ -237,35 +445,68 @@ export default function TiptapEditor({
           margin: 1rem 0;
           overflow-x: auto;
         }
-      `}</style>   
+
+        .resizable-image {
+          display: inline-block;
+          position: relative;
+          max-width: 100%;
+        }
+
+        .resizable-image img {
+          max-width: 100%;
+          height: auto;
+        }
+
+        .resizable-image .resize-handle {
+          position: absolute;
+          right: -8px;
+          bottom: -8px;
+          width: 16px;
+          height: 16px;
+          background-color: #4299e1;
+          border-radius: 50%;
+          cursor: nwse-resize;
+          opacity: 0;
+          transition: opacity 0.2s;
+        }
+
+        .resizable-image:hover .resize-handle {
+          opacity: 1;
+        }
+
+        .resizable-image.resizing {
+          user-select: none;
+        }
+      `}</style>
       <div className="flex flex-wrap items-center gap-1 p-2 border-b bg-gray-50">
-      <div className="flex items-center border-r border-gray-200 pr-2 mr-1">
-        <button
-          onClick={() => editor.chain().focus().undo().run()}
-          disabled={!editor?.can().undo()}
-          className={`p-1 rounded ${
-            !editor?.can().undo() 
-              ? 'opacity-30 cursor-not-allowed text-gray-400' 
-              : 'hover:bg-gray-100 text-gray-600'
-          }`}
-          title="Annuler (Ctrl+Z)"
-        >
-          <BiUndo className="w-5 h-5" />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().redo().run()}
-          disabled={!editor?.can().redo()}
-          className={`p-1 rounded ${
-            !editor?.can().redo() 
-              ? 'opacity-30 cursor-not-allowed text-gray-400' 
-              : 'hover:bg-gray-100 text-gray-600'
-          }`}
-          title="Rétablir (Ctrl+Y)"
-        >
-          <BiRedo className="w-5 h-5" />
-        </button>
-      </div>
-      <div className="relative">
+        <div className="flex items-center border-r border-gray-200 pr-2 mr-1">
+          <button
+            onClick={() => editor.chain().focus().undo().run()}
+            disabled={!editor?.can().undo()}
+            className={`p-1 rounded ${
+              !editor?.can().undo() 
+                ? 'opacity-30 cursor-not-allowed text-gray-400' 
+                : 'hover:bg-gray-100 text-gray-600'
+            }`}
+            title="Annuler (Ctrl+Z)"
+          >
+            <BiUndo className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().redo().run()}
+            disabled={!editor?.can().redo()}
+            className={`p-1 rounded ${
+              !editor?.can().redo() 
+                ? 'opacity-30 cursor-not-allowed text-gray-400' 
+                : 'hover:bg-gray-100 text-gray-600'
+            }`}
+            title="Rétablir (Ctrl+Y)"
+          >
+            <BiRedo className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="relative">
           <button
             onClick={() => setShowColorPicker(!showColorPicker)}
             className={`p-2 rounded ${
@@ -318,40 +559,39 @@ export default function TiptapEditor({
             </div>
           )}
         </div>
-        {/* Menu Publipostage */}
-       {/* Menu Publipostage */}
-       <div className="relative">
-  <button 
-    onClick={() => setShowVariableMenu(!showVariableMenu)}
-    className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md border bg-white hover:bg-gray-50"
-  >
-    <span>Publipostage</span>
-    <ChevronDown 
-      size={16} 
-      className={`transition-transform ${showVariableMenu ? 'rotate-180' : ''}`}
-    />
-  </button>
-  
-  {showVariableMenu && (
-  <div className="absolute z-20 left-0 mt-1 w-[28rem] bg-white rounded-md shadow-lg border border-gray-200">
-    <div className="p-3 border-b bg-gray-50 sticky top-0">
-      <h3 className="text-sm font-medium text-gray-700">
-        Champs disponibles - {templateData?.type ? templateData.type.toUpperCase() : 'DEVIS'}
-      </h3>
-    </div>
-    <div className="overflow-y-auto" style={{ maxHeight: '70vh' }}>
-      <TemplateFieldsPanel
-        key={templateData?.type || 'quotation'} // Utilisez une clé unique basée sur le type
-        onInsertField={insertDynamicField}
-        type={templateData?.type || 'quotation'} // Fallback explicite à 'quotation'
-        compact={false}
-      />
-    </div>
-  </div>
-)}
-</div>
 
-        {/* Menu Affichage */}
+        <div className="relative">
+          <button 
+            onClick={() => setShowVariableMenu(!showVariableMenu)}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md border bg-white hover:bg-gray-50"
+          >
+            <span>Publipostage</span>
+            <ChevronDown 
+              size={16} 
+              className={`transition-transform ${showVariableMenu ? 'rotate-180' : ''}`}
+            />
+          </button>
+          
+          {showVariableMenu && (
+            <div className="absolute z-50 left-0 mt-1 w-[28rem] bg-white rounded-md shadow-lg border border-gray-200">
+              <div className="p-3 border-b bg-gray-50 sticky top-0">
+                <h3 className="text-sm font-medium text-gray-700">
+                  Champs disponibles - {templateData?.type ? templateData.type.toUpperCase() : 'DOCUMENT'}
+                </h3>
+              </div>
+              <div className="overflow-y-auto" style={{ maxHeight: '70vh' }}>
+                <TemplateFieldsPanel
+                  key={`fields-${documentType}-${Date.now()}`}
+                  onInsertField={insertDynamicField}
+                  type={documentType as TemplateType}
+                  compact={false}
+                  templateData={templateData}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="relative">
           <button 
             className="flex items-center gap-1 px-3 py-1 text-sm border rounded hover:bg-gray-100"
@@ -361,7 +601,6 @@ export default function TiptapEditor({
           </button>
         </div>
 
-        {/* Menu Paragraphe */}
         <div className="relative">
           <button 
             className="flex items-center gap-1 px-3 py-1 text-sm border rounded hover:bg-gray-100"
@@ -373,39 +612,37 @@ export default function TiptapEditor({
 
         <div className="border-l h-6 mx-2"></div>
 
-        {/* Titres */}
         <select
-  onChange={(e) => {
-    const value = e.target.value;
-    if (value === 'paragraph') {
-      editor.chain().focus().setParagraph().run();
-    } else {
-      const level = parseInt(value.replace('h', '')) as 1 | 2 | 3;
-      editor.chain().focus().toggleHeading({ level }).run();
-    }
-  }}
-  value={
-    editor.isActive('paragraph') 
-      ? 'paragraph' 
-      : editor.isActive('heading', { level: 1 }) 
-        ? 'h1' 
-        : editor.isActive('heading', { level: 2 }) 
-          ? 'h2' 
-          : editor.isActive('heading', { level: 3 }) 
-            ? 'h3' 
-            : 'paragraph'
-  }
-  className="p-1 text-sm border rounded hover:bg-gray-100"
->
-  <option value="paragraph">Normal</option>
-  <option value="h1">Titre 1</option>
-  <option value="h2">Titre 2</option>
-  <option value="h3">Titre 3</option>
-</select>
+          onChange={(e) => {
+            const value = e.target.value;
+            if (value === 'paragraph') {
+              editor.chain().focus().setParagraph().run();
+            } else {
+              const level = parseInt(value.replace('h', '')) as 1 | 2 | 3;
+              editor.chain().focus().toggleHeading({ level }).run();
+            }
+          }}
+          value={
+            editor.isActive('paragraph') 
+              ? 'paragraph' 
+              : editor.isActive('heading', { level: 1 }) 
+                ? 'h1' 
+                : editor.isActive('heading', { level: 2 }) 
+                  ? 'h2' 
+                  : editor.isActive('heading', { level: 3 }) 
+                    ? 'h3' 
+                    : 'paragraph'
+          }
+          className="p-1 text-sm border rounded hover:bg-gray-100"
+        >
+          <option value="paragraph">Normal</option>
+          <option value="h1">Titre 1</option>
+          <option value="h2">Titre 2</option>
+          <option value="h3">Titre 3</option>
+        </select>
 
         <div className="border-l h-6 mx-2"></div>
 
-        {/* Formatage de texte */}
         <button
           onClick={() => editor.chain().focus().toggleBold().run()}
           className={`p-2 rounded ${editor.isActive('bold') ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
@@ -430,7 +667,6 @@ export default function TiptapEditor({
 
         <div className="border-l h-6 mx-2"></div>
 
-        {/* Listes */}
         <button
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           className={`p-2 rounded ${editor.isActive('bulletList') ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
@@ -448,7 +684,6 @@ export default function TiptapEditor({
 
         <div className="border-l h-6 mx-2"></div>
 
-        {/* Alignement */}
         <button
           onClick={() => editor.chain().focus().setTextAlign('left').run()}
           className={`p-2 rounded ${editor.isActive({ textAlign: 'left' }) ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
@@ -473,7 +708,6 @@ export default function TiptapEditor({
 
         <div className="border-l h-6 mx-2"></div>
 
-        {/* Liens */}
         <div className="relative">
           <button
             onClick={() => setShowLinkMenu(!showLinkMenu)}
@@ -501,7 +735,6 @@ export default function TiptapEditor({
           )}
         </div>
 
-        {/* Tableaux */}
         <div className="relative">
           <button 
             onClick={() => setShowTablePopup(true)}
@@ -511,96 +744,133 @@ export default function TiptapEditor({
             <FaTable />
           </button>
           <button
-    onClick={() => editor.chain().focus().deleteTable().run()}
-    disabled={!editor?.isActive('table')}
-    className={`p-2 rounded ${!editor?.isActive('table') ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100 hover:text-red-500'}`}
-    title="Supprimer le tableau"
-  >
-    <FaTrash />
-  </button>
-          {showTablePopup && (
-            <div className="absolute z-50 left-0 mt-2 w-64 bg-white rounded-md shadow-lg border">
-              <div className="p-3 border-b">
-                <h3 className="text-sm font-medium">Insérer un tableau</h3>
-              </div>
-              <div className="p-3">
-                <div className="grid grid-cols-6 gap-1 mb-2">
-                  {[...Array(6)].map((_, i) =>
-                    [...Array(6)].map((_, j) => (
-                      <div
-                        key={`${i}-${j}`}
-                        className={`w-6 h-6 border cursor-pointer ${
-                          i < tableSize.rows && j < tableSize.cols
-                            ? 'bg-blue-500'
-                            : 'bg-gray-100'
-                        }`}
-                        onMouseEnter={() => handleHoverTableSize(i + 1, j + 1)}
-                        onClick={handleTableInsert}
-                      />
-                    ))
-                  )}
-                </div>
-                <div className="text-center text-xs text-gray-500">
-                  {tableSize.rows} × {tableSize.cols}
-                </div>
-                <button
-                  onClick={handleTableInsert}
-                  className="mt-2 w-full py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                >
-                  Insérer
-                </button>
-              </div>
-            </div>
-          )}
+            onClick={() => editor.chain().focus().deleteTable().run()}
+            disabled={!editor?.isActive('table')}
+            className={`p-2 rounded ${!editor?.isActive('table') ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100 hover:text-red-500'}`}
+            title="Supprimer le tableau"
+          >
+            <FaTrash />
+          </button>
+          {/* Dans la partie Tableau du JSX */}
+{showTablePopup && (
+  <div className="absolute z-50 left-0 mt-2 w-64 bg-white rounded-md shadow-lg border">
+    <div className="p-3 border-b">
+      <h3 className="text-sm font-medium">Insérer un tableau</h3>
+    </div>
+    <div className="p-3">
+      {/* Changement ici : grid-cols-9 au lieu de grid-cols-6 */}
+      <div className="grid grid-cols-9 gap-1 mb-2">
+        {[...Array(9)].map((_, i) =>  // Changé de 6 à 9
+          [...Array(9)].map((_, j) =>  // Changé de 6 à 9
+            <div
+              key={`${i}-${j}`}
+              className={`w-6 h-6 border cursor-pointer ${
+                i < tableSize.rows && j < tableSize.cols
+                  ? 'bg-blue-500'
+                  : 'bg-gray-100'
+              }`}
+              onMouseEnter={() => handleHoverTableSize(i + 1, j + 1)}
+              onClick={handleTableInsert}
+            />
+          ))
+        }
+      </div>
+      <div className="text-center text-xs text-gray-500">
+        {tableSize.rows} × {tableSize.cols}
+      </div>
+      <button
+        onClick={handleTableInsert}
+        className="mt-2 w-full py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+      >
+        Insérer
+      </button>
+    </div>
+  </div>
+)}
         </div>
 
-</div>
-      {/* Bubble Menu */}
-      {editor && (
-  <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }}>
-    <div className="flex bg-white shadow-lg rounded-md overflow-hidden border divide-x">
-      <button
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        className={`p-2 ${editor.isActive('bold') ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
-      >
-        <FaBold />
-      </button>
-      <button
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        className={`p-2 ${editor.isActive('italic') ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
-      >
-        <FaItalic />
-      </button>
-      <button
-        onClick={() => editor.chain().focus().toggleUnderline().run()}
-        className={`p-2 ${editor.isActive('underline') ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
-      >
-        <FaUnderline />
-      </button>
-      <button
-        onClick={() => {
-          const previousUrl = editor.getAttributes('link').href;
-          setLinkUrl(previousUrl || '');
-          setShowLinkMenu(true);
-        }}
-        className={`p-2 ${editor.isActive('link') ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
-      >
-        <FaLink />
-      </button>
-      {editor.isActive('table') && (
-        <button
-          onClick={() => editor.chain().focus().deleteTable().run()}
-          className="p-2 hover:bg-red-50 text-red-500"
-          title="Supprimer le tableau"
-        >
-          <FaTrash />
-        </button>
-      )}
-    </div>
-  </BubbleMenu>
-)}
+        <div className="relative">
+          <button
+            onClick={() => {
+              const url = window.prompt('Entrez l\'URL de l\'image');
+              if (url) {
+                editor.chain().focus().setImage({ src: url }).run();
+              }
+            }}
+            className="p-2 rounded hover:bg-gray-100"
+            title="Insérer une image"
+          >
+            <FaImage />
+          </button>
+        </div>
+        <div className="relative">
+          <label className="p-2 rounded hover:bg-gray-100 cursor-pointer" title="Uploader une image">
+            <FaUpload />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+          </label>
+        </div>
+      </div>
 
-      <EditorContent editor={editor} />
+      {editor && (
+        <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }}>
+          <div className="flex bg-white shadow-lg rounded-md overflow-hidden border divide-x">
+            <button
+              onClick={() => editor.chain().focus().toggleBold().run()}
+              className={`p-2 ${editor.isActive('bold') ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
+            >
+              <FaBold />
+            </button>
+            <button
+              onClick={() => editor.chain().focus().toggleItalic().run()}
+              className={`p-2 ${editor.isActive('italic') ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
+            >
+              <FaItalic />
+            </button>
+            <button
+              onClick={() => editor.chain().focus().toggleUnderline().run()}
+              className={`p-2 ${editor.isActive('underline') ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
+            >
+              <FaUnderline />
+            </button>
+            <button
+              onClick={() => {
+                const previousUrl = editor.getAttributes('link').href;
+                setLinkUrl(previousUrl || '');
+                setShowLinkMenu(true);
+              }}
+              className={`p-2 ${editor.isActive('link') ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
+            >
+              <FaLink />
+            </button>
+            {editor.isActive('table') && (
+              <button
+                onClick={() => editor.chain().focus().deleteTable().run()}
+                className="p-2 hover:bg-red-50 text-red-500"
+                title="Supprimer le tableau"
+              >
+                <FaTrash />
+              </button>
+            )}
+          </div>
+        </BubbleMenu>
+      )}
+
+<div className="flex-1 overflow-auto">
+      <EditorContent 
+        editor={editor}
+        className="tiptap-editor"
+        style={{ 
+          minHeight: '100%',
+          overflow: 'visible' // Important pour le contenu éditable
+        }}
+        ref={editorRef}
+      />
+    </div>
     </div>
   );
 }

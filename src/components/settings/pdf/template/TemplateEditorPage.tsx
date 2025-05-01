@@ -1,31 +1,39 @@
-'use client'
-
 import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
 import { TemplateEditorHeader } from './TemplateEditorHeader'
-import { useState } from 'react'
+import { useState, useEffect } from 'react' // Ajout de useEffect
 import TiptapEditor from './TemplateEditor'
 import { templateApi } from '@/api/template'
-import { TemplateType, TemplateTypeValues } from '@/types/template'
+import { Template, TemplateType, TemplateTypeValues } from '@/types/template'
 import { toast } from 'sonner'
 
 interface TemplateEditorPageProps {
-  type: TemplateTypeValues
+  type: TemplateType
   initialContent?: string
   initialName?: string
   templateId?: number
+  templateData?: Template;
 }
 
 export function TemplateEditorPage({ 
-  type, 
+  type: initialType, // Renommage pour éviter la confusion
   initialContent = '', 
   initialName = '', 
-  templateId 
+  templateId,
+  templateData,
 }: TemplateEditorPageProps) {
   const router = useRouter()
   const [content, setContent] = useState(initialContent)
   const [name, setName] = useState(initialName)
   const [isSaving, setIsSaving] = useState(false)
+  const [type, setType] = useState<TemplateType>(initialType) // État séparé pour le type
+
+  // Effet pour mettre à jour le type si templateData change
+  useEffect(() => {
+    if (templateData?.type) {
+      setType(templateData.type)
+    }
+  }, [templateData])
 
   const handleSave = async () => {
     try {
@@ -44,7 +52,7 @@ export function TemplateEditorPage({
       const templateData = {
         name,
         content,
-        type: type as TemplateType,
+        type: type, // Utilisation de l'état type plutôt que la prop
         isDefault: false
       }
 
@@ -71,8 +79,8 @@ export function TemplateEditorPage({
   return (
     <div className="container mx-auto py-8">
       <TemplateEditorHeader 
-        type={type} 
-        onBack={() => router.push('/settings/pdf/templates')} // Redirection cohérente
+        type={type} // Passage de l'état type
+        onBack={() => router.push('/settings/pdf/templates')}
         name={name}
         onNameChange={setName}
       />
@@ -81,6 +89,8 @@ export function TemplateEditorPage({
         <TiptapEditor
           value={content}
           onChange={setContent}
+          templateData={templateData}
+          templateId={templateId}
         />
       </div>
 

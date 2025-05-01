@@ -40,5 +40,7 @@ export function TemplateEditorHeader({ type, onBack }: TemplateEditorHeaderProps
         </p>
       </div>
     </div>
+
+    
   )
 }
