@@ -128,7 +128,25 @@ input[type='number'] {
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none; /* Firefox */
 }
-/* Styles spécifiques à l'éditeur Tiptap */
+
+/* ==================== ÉDITEUR TIPTAP ==================== */
+
+/* Conteneur principal */
+.tiptap-editor {
+  padding: 1rem;
+  min-height: 700px;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background-color: white;
+}
+
+/* Styles de base pour le contenu */
+.ProseMirror {
+  outline: none;
+  min-height: 100%;
+}
+
+/* Titres */
 .ProseMirror {
   h1 {
     @apply text-3xl font-bold my-4 text-gray-900 dark:text-white;
@@ -141,157 +159,7 @@ input[type='number'] {
   }
 }
 
-/* Styles pour les tableaux */
-.my-table {
-  border-collapse: collapse;
-  margin: 1rem 0;
-  width: 100%;
-  border: 1px solid #000; /* Bordure principale du tableau */
-}
-
-.my-table td, 
-.my-table th {
-  border: 1px solid #000; /* Bordures des cellules */
-  padding: 8px;
-  min-width: 50px;
-  position: relative;
-}
-
-.my-table th {
-  background-color: #e91c1c;
-  font-weight: bold;
-  text-align: left;
-}
-
-/* Style pour les cellules d'en-tête */
-.my-table-header {
-  background-color: #a51212;
-  font-weight: bold;
-}
-
-/* Style pour les cellules normales */
-.my-table-cell {
-  background-color: #5c2d2d;
-}
-.my-custom-table {
-  border-collapse: collapse !important;
-  border-style: solid !important;
-  border-width: 1px !important;
-  border-color: #1e293b !important; /* gray-800 */
-  margin: 1rem 0 !important;
-  width: 100% !important;
-}
-
-.my-custom-cell, .my-custom-header {
-  border-style: solid !important;
-  border-width: 1px !important;
-  border-color: #94a3b8 !important; /* gray-400 */
-  padding: 0.5rem !important;
-  min-width: 50px !important;
-}
-
-.my-custom-header {
-  background-color: #f1f5f9 !important; /* gray-100 */
-  font-weight: 700 !important; /* bold */
-}
-/* Styles globaux pour les tables Tiptap */
-.ProseMirror {
-  table {
-    border-collapse: collapse;
-    margin: 1rem 0;
-    width: 100%;
-    border: 1px solid #1e293b !important;
-    
-    td, th {
-      border: 1px solid #94a3b8 !important;
-      padding: 0.5rem !important;
-      min-width: 50px !important;
-      position: relative;
-    }
-
-    th {
-      background-color: #f1f5f9 !important;
-      font-weight: bold !important;
-      text-align: left !important;
-    }
-  }
-}
-.dynamic-field {
-  background-color: #f0f7ff;
-  border: 1px dashed #3b82f6;
-  padding: 0.1rem 0.3rem;
-  border-radius: 0.25rem;
-  color: #1d4ed8;
-  font-family: monospace;
-}
-
-.address-field {
-  border-left: 2px solid #3b82f6;
-  padding-left: 0.5rem;
-  margin: 0.5rem 0;
-}
-
-.dynamic-field:hover {
-  background-color: #dbeafe;
-}
-.inline-image {
-  max-width: 100%;
-  height: auto;
-  display: inline-block;
-  margin: 0.5rem 0;
-}
-
-.tiptap-editor img.inline-image {
-  max-width: 100%;
-  height: auto;
-  display: inline-block;
-}
-
-.tiptap-editor img.inline-image[width] {
-  width: var(--width);
-}
-
-.tiptap-editor img.inline-image[height] {
-  height: var(--height);
-}
-
-.resizable-image-container {
-  position: relative;
-  display: inline-block;
-  margin: 0.5rem 0;
-  max-width: 100%;
-}
-
-.resizable-image-container img {
-  max-width: 100%;
-  height: auto;
-  display: block;
-}
-
-.resize-handle {
-  position: absolute;
-  right: -8px;
-  bottom: -8px;
-  width: 16px;
-  height: 16px;
-  background-color: #4299e1;
-  border: 2px solid white;
-  border-radius: 50%;
-  cursor: nwse-resize;
-  opacity: 0;
-  transition: opacity 0.2s;
-  z-index: 10;
-}
-
-.resizable-image-container:hover .resize-handle {
-  opacity: 1;
-}
-
-.resizing {
-  user-select: none;
-}
-
-/* Styles pour les listes */
+/* Listes */
 .ProseMirror {
   ul, ol {
     padding: 0 1rem;
@@ -311,55 +179,290 @@ input[type='number'] {
     position: relative;
   }
 
-  /* Amélioration de l'espacement pour les listes imbriquées */
+  /* Listes imbriquées */
   ul ul, ol ol {
     margin-top: 0;
     margin-bottom: 0;
     padding-left: 1.5rem;
   }
 
-  /* Style pour les éléments de liste */
   li > p {
     margin: 0;
     display: inline;
   }
 }
 
+/* Tableaux */
+.ProseMirror {
+  table {
+    border-collapse: collapse;
+    margin: 1rem 0;
+    width: 100%;
+    table-layout: fixed;
+    border: 1px solid #1e293b !important;
+    
+    td, th {
+      border: 1px solid #94a3b8 !important;
+      padding: 0.5rem !important;
+      min-width: 50px !important;
+      position: relative;
+    }
 
-
-.tiptap-editor {
-  padding: 1rem;
-  min-height: 100%; /* Changé de 700px à 100% */
-  border: 1px solid #e2e8f0;
-  border-radius: 0.5rem;
+    th {
+      background-color: #f1f5f9 !important;
+      font-weight: bold !important;
+      text-align: left !important;
+    }
+  }
 }
 
-.tiptap p[data-text-align="left"] {
+/* Champs dynamiques */
+.dynamic-field {
+  background-color: #f0f7ff;
+  border: 1px dashed #3b82f6;
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+  color: #1d4ed8;
+  font-family: monospace;
+}
+
+.dynamic-field:hover {
+  background-color: #dbeafe;
+}
+
+.address-field {
+  border-left: 2px solid #3b82f6;
+  padding-left: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+/* ==================== STYLES DES IMAGES ==================== */
+
+/* Conteneur d'image redimensionnable */
+.resizable-image-container {
+  position: relative;
+  display: inline-block;
+  margin: 0.5em;
+  max-width: 100%;
+  line-height: 0;
+}
+
+/* Image à l'intérieur du conteneur */
+.resizable-image-container img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Alignement à gauche */
+.resizable-image-container.align-left,
+.resizable-image-container[style*="float: left"] {
+  float: left;
+  margin-right: 1em;
+  margin-left: 0;
+}
+
+/* Alignement à droite */
+.resizable-image-container.align-right,
+.resizable-image-container[style*="float: right"] {
+  float: right;
+  margin-left: 1em;
+  margin-right: 0;
+}
+
+/* Centrage */
+.resizable-image-container.align-center,
+.resizable-image-container[style*="margin-left: auto"],
+.resizable-image-container[style*="margin-right: auto"] {
+  display: block;
+  float: none;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* Poignée de redimensionnement */
+.resize-handle {
+  position: absolute;
+  right: -8px;
+  bottom: -8px;
+  width: 16px;
+  height: 16px;
+  background-color: #4299e1;
+  border: 2px solid white;
+  border-radius: 50%;
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 10;
+}
+
+.resizable-image-container:hover .resize-handle {
+  opacity: 1;
+}
+
+/* Pendant le redimensionnement */
+.resizable-image-container.resizing {
+  user-select: none;
+}
+
+/* Nettoyage des flottants */
+.ProseMirror:after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+/* Images dans les tableaux */
+.ProseMirror table .resizable-image-container {
+  display: block;
+  margin: 0 auto;
+}
+
+.ProseMirror table td[data-text-align="left"] .resizable-image-container,
+.ProseMirror table th[data-text-align="left"] .resizable-image-container {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+.ProseMirror table td[data-text-align="center"] .resizable-image-container,
+.ProseMirror table th[data-text-align="center"] .resizable-image-container {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.ProseMirror table td[data-text-align="right"] .resizable-image-container,
+.ProseMirror table th[data-text-align="right"] .resizable-image-container {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+/* ==================== STYLES SPÉCIFIQUES ==================== */
+
+/* Menu bubble */
+.tiptap-bubble-menu {
+  background-color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  padding: 4px;
+  display: flex;
+  gap: 2px;
+}
+
+/* Cachets et signatures */
+.document-stamp-container,
+.document-signature-container {
+  display: inline-block;
+  position: relative;
+  margin: 0.5em;
+}
+
+.document-stamp-image,
+.document-signature-image {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Alignement du texte */
+[data-text-align="left"] {
   text-align: left;
 }
 
-.tiptap p[data-text-align="center"] {
+[data-text-align="center"] {
   text-align: center;
 }
 
-.tiptap p[data-text-align="right"] {
+[data-text-align="right"] {
   text-align: right;
 }
 
-.tiptap .align-container {
-  display: flex;
-  justify-content: space-between;
+/* Éléments flex */
+.flex-item {
+  border: 1px dashed #ddd;
+  padding: 0.5rem;
+  min-height: 50px;
+}
+
+.flex-item[data-align="left"] {
+  text-align: left;
+  margin-right: auto;
+}
+
+.flex-item[data-align="center"] {
+  text-align: center;
+  margin: 0 auto;
+}
+
+.flex-item[data-align="right"] {
+  text-align: right;
+  margin-left: auto;
+}
+
+/* ==================== STYLES DES TABLEAUX POUR EXPORT PDF ==================== */
+
+.tiptap-editor table {
+  border-collapse: collapse !important;
+  margin: 1rem 0;
+  width: 100%;
+  table-layout: fixed;
+  border: 1px solid #1e293b !important;
+}
+
+.tiptap-editor th,
+.tiptap-editor td {
+  border: 1px solid #94a3b8 !important;
+  padding: 0.5rem;
+  min-width: 50px;
+  position: relative;
+}
+
+.tiptap-editor th {
+  background-color: #f1f5f9 !important;
+  font-weight: bold !important;
+  text-align: left !important;
+}
+
+.tiptap-editor .tableWrapper {
+  margin: 1rem 0;
+  overflow-x: auto;
+}
+
+/* Styles spécifiques pour les cellules vides */
+.tiptap-editor td:empty::after {
+  content: " ";
+  display: inline-block;
   width: 100%;
 }
 
-.tiptap .align-left {
-  text-align: left;
+/* Styles pour les tableaux en mode sombre */
+.dark .tiptap-editor table {
+  border-color: #475569 !important;
 }
 
-.tiptap .align-center {
-  text-align: center;
+.dark .tiptap-editor th,
+.dark .tiptap-editor td {
+  border-color: #64748b !important;
 }
 
-.tiptap .align-right {
-  text-align: right;
+.dark .tiptap-editor th {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+/* Amélioration de la visibilité des bordures pour l'export PDF */
+@media print {
+  .tiptap-editor table {
+    border: 2px solid #000 !important;
+  }
+  
+  .tiptap-editor th,
+  .tiptap-editor td {
+    border: 1.5px solid #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  
+  .tiptap-editor th {
+    background-color: #e2e8f0 !important;
+  }
 }

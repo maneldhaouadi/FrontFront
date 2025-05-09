@@ -34,16 +34,18 @@ export interface ExpenseQuotationTaxEntry extends DatabaseEntity {
 
 export interface ExpenseArticleQuotationEntry extends DatabaseEntity {
   id?: number;
-  expenseQuotationId?: number;  // Linking to `expense_quotation`
+  expenseQuotationId?: number;
   article?: Article;
   articleId?: number;
   unit_price?: number;
   quantity?: number;
   discount?: number;
   discount_type?: DISCOUNT_TYPE;
-  articleExpensQuotationEntryTaxes?: ExpenseQuotationTaxEntry[];  // Relates to `expense_article_quotation_entry_tax`
+  articleExpensQuotationEntryTaxes?: ExpenseQuotationTaxEntry[];
   subTotal?: number;
   total?: number;
+  orderedQuantity?: number;     // ✅ Nouveau champ
+  originalStock?: number;       // ✅ Nouveau champ
 }
 
 export interface CreateExpensArticleQuotationEntry extends Omit<

@@ -11,7 +11,7 @@ import {
 import { DotsHorizontalIcon } from '@radix-ui/react-icons';
 import { Row } from '@tanstack/react-table';
 import { useTranslation } from 'react-i18next';
-import { Copy, Settings2, Telescope, Trash2 } from 'lucide-react';
+import { Copy, Download, Settings2, Telescope, Trash2 } from 'lucide-react';
 import { ExpenseInvoice } from '@/types/expense_invoices';
 import { useExpenseInvoiceManager } from '../hooks/useExpenseInvoiceManager';
 import { ExpenseUseInvoiceActions } from './ActionsContext';
@@ -26,7 +26,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { t: tCommon } = useTranslation('common');
   const router = useRouter();
   const invoiceManager = useExpenseInvoiceManager();
-  const { openDeleteDialog,openDuplicateDialog } = ExpenseUseInvoiceActions();
+  const { openDeleteDialog, openDuplicateDialog, openDownloadDialog } = ExpenseUseInvoiceActions();
 
   const targetInvoice = () => {
     invoiceManager.set('id', invoice?.id);
@@ -43,10 +43,20 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
       <DropdownMenuContent align="center" className="w-[160px]">
         <DropdownMenuLabel className="text-center">{tCommon('commands.actions')}</DropdownMenuLabel>
         <DropdownMenuSeparator />
+        
         {/* Inspect */}
         <DropdownMenuItem onClick={() => router.push('/buying/expense_invoice/' + invoice.id + '?mode=inspect')}>
-  <Telescope className="h-5 w-5 mr-2" /> {tCommon('commands.inspect')}
-</DropdownMenuItem>{/* Print */}
+          <Telescope className="h-5 w-5 mr-2" /> {tCommon('commands.inspect')}
+        </DropdownMenuItem>
+
+        {/* Download */}
+        <DropdownMenuItem onClick={() => {
+          targetInvoice();
+          openDownloadDialog?.();
+        }}>
+          <Download className="h-5 w-5 mr-2" /> {tCommon('commands.download')}
+        </DropdownMenuItem>
+
         {/* Duplicate */}
         <DropdownMenuItem
           onClick={() => {
@@ -55,9 +65,13 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           }}>
           <Copy className="h-5 w-5 mr-2" /> {tCommon('commands.duplicate')}
         </DropdownMenuItem>
+
+        {/* Modify */}
         <DropdownMenuItem onClick={() => router.push('/buying/expense_invoice/' + invoice.id)}>
           <Settings2 className="h-5 w-5 mr-2" /> {tCommon('commands.modify')}
         </DropdownMenuItem>
+
+        {/* Delete */}
         <DropdownMenuItem
           onClick={() => {
             targetInvoice();

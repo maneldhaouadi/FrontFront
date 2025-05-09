@@ -16,6 +16,7 @@ interface ExpensePaymentInvoiceItemProps {
   currency?: Currency;
   paymentConvertionRate?: number;
   onChange: (item: ExpensePaymentInvoiceEntry) => void;
+  disabled?: boolean; // Ajout de la prop
 }
 
 export const ExpensePaymentInvoiceItem: React.FC<ExpensePaymentInvoiceItemProps> = ({
@@ -24,6 +25,7 @@ export const ExpensePaymentInvoiceItem: React.FC<ExpensePaymentInvoiceItemProps>
   paymentConvertionRate = 1,
   currency,
   onChange,
+  disabled = false,
 }) => {
   const router = useRouter();
   const { t: tInvoicing } = useTranslation('invoicing');

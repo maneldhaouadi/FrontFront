@@ -55,6 +55,13 @@ const findPaginated = async (
 const uploadPaymentFiles = async (files: File[]): Promise<number[]> => {
   return files && files?.length > 0 ? await upload.uploadFiles(files) : [];
 };
+const downloadPdf = async (paymentId: number, templateId?: number): Promise<Blob> => {
+  const response = await axios.get(`/public/templates/payments/${paymentId}/export-pdf`, {
+    params: { templateId },
+    responseType: 'blob'
+  });
+  return response.data;
+};
 
 const create = async (payment: ExpenseCreatePaymentDto, files: File[] = []): Promise<ExpensePayment> => {
   let pdfFileId = payment.pdfFileId;
@@ -230,4 +237,5 @@ const validate = (
   return { message: '', position: 'bottom-right' };
 };
 
-export const expensepayment = { findOne, findPaginated, create, update, remove, validate,deletePdfFile };
+export const expensepayment = { findOne, findPaginated, create, update, remove, validate,deletePdfFile,  downloadPdf // Ajoutez cette ligne
+};

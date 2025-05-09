@@ -14,7 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 
 interface TemplateListProps {
   type: TemplateType
@@ -62,6 +62,7 @@ export function TemplateList({ type }: TemplateListProps) {
 const TemplateItem = ({ template, type }: { template: Template; type: TemplateType }) => {
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadFormat, setDownloadFormat] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDownload = async (format: 'pdf' | 'docx' | 'png' | 'jpeg') => {
     try {
@@ -94,6 +95,23 @@ const TemplateItem = ({ template, type }: { template: Template; type: TemplateTy
       setDownloadFormat(null)
     }
   }
+  const handleDelete = async () => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce template ?")) return;
+    
+    try {
+      setIsDeleting(true);
+      await templateApi.remove(template.id);
+      toast.success("Template supprimé avec succès");
+      // Optionnel : Recharger la liste des templates après suppression
+      window.location.reload(); // Ou utiliser un state global (ex: React Query)
+    } catch (error) {
+      toast.error("Échec de la suppression", {
+        description: error instanceof Error ? error.message : "Erreur inconnue",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <Card className="p-4 flex justify-between items-center">
@@ -113,19 +131,23 @@ const TemplateItem = ({ template, type }: { template: Template; type: TemplateTy
             Éditer
           </Link>
         </Button>
-        
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleDelete}
+          disabled={isDeleting}
+          className="text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
+        >
+          {isDeleting ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin text-red-600" />
+          ) : (
+            <span className="flex items-center gap-1">
+              <Trash2 className="w-4 h-4" />
+              Supprimer
+            </span>
+          )}
+        </Button>
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="default" size="sm" disabled={isDownloading}>
-              {isDownloading ? (
-                <>
-                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />                  {downloadFormat?.toUpperCase()}
-                </>
-              ) : (
-                'Télécharger'
-              )}
-            </Button>
-          </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => handleDownload('pdf')}>
               PDF

@@ -31,6 +31,7 @@ interface ExpensePaymentGeneralInformationProps {
   firms: Firm[];
   currencies: Currency[];
   loading?: boolean;
+  disabled?: boolean; // Ajout de la prop disabled
   onUploadPdfFile?: (file: File) => void;
   onRemovePdfFile?: () => void;
 }
@@ -40,6 +41,7 @@ export const ExpensePaymentGeneralInformation = ({
   firms,
   currencies,
   loading,
+  disabled = false, // Valeur par défaut
   onUploadPdfFile,
   onRemovePdfFile,
 }: ExpensePaymentGeneralInformationProps) => {
@@ -52,6 +54,8 @@ export const ExpensePaymentGeneralInformation = ({
 
   // Gestion du fichier PDF
   const handlePdfFileChange = (files: File[]) => {
+    if (disabled) return; // Ne rien faire si désactivé
+    
     if (files.length > 0) {
       if (paymentManager.pdfFile || paymentManager.uploadPdfField) {
         toast.warning(tInvoicing('payment.pdf_file_cannot_be_modified'));
@@ -65,6 +69,8 @@ export const ExpensePaymentGeneralInformation = ({
   };
 
   const handleRemovePdfFile = async () => {
+    if (disabled) return; // Ne rien faire si désactivé
+    
     try {
       if (paymentManager.pdfFileId) {
         if (typeof paymentManager.id === 'number') {
@@ -86,25 +92,10 @@ export const ExpensePaymentGeneralInformation = ({
     }
   };
 
-  
-
   return (
     <div className={cn('flex flex-col gap-8', className)}>
-      {/* Champ pour saisir le numéro séquentiel */}
-      <div className="w-1/3">
-        <Label className="text-xs font-semibold mb-1">{tInvoicing('payment.sequentialNumbr')}</Label>
-        <Input
-          className="w-full h-8"
-          placeholder={tInvoicing('payment.sequentialNumbr_placeholder')}
-          value={paymentManager.sequentialNumbr || ''}
-          onChange={(e) => paymentManager.set('sequentialNumbr', e.target.value)}
-          isPending={loading}
-        />
-      </div>
-
       {/* Section Pièces jointes et Date */}
       <div className="grid grid-cols-2 gap-4">
-        {/* Pièces jointes */}
         {/* Date */}
         <div className="flex flex-col gap-2">
           <Label>{tInvoicing('invoice.attributes.date')} (*)</Label>
@@ -116,13 +107,13 @@ export const ExpensePaymentGeneralInformation = ({
                 : { from: undefined, to: undefined }
             }
             onDateSelect={({ from, to }) => {
-              paymentManager.set('date', from);
+              if (!disabled) paymentManager.set('date', from);
             }}
             variant="outline"
             numberOfMonths={1}
             className="w-full py-4 mt-1"
             isPending={loading}
-          />
+            disabled={disabled || loading}          />
         </div>
       </div>
 
@@ -134,15 +125,14 @@ export const ExpensePaymentGeneralInformation = ({
           <SelectShimmer isPending={loading}>
             <Select
               onValueChange={(e) => {
+                if (disabled) return;
                 const firm = firms?.find((firm) => firm.id === parseInt(e));
                 paymentManager.set('firmId', firm?.id);
                 paymentManager.set('firm', firm);
                 paymentManager.set('currencyId', firm?.currency?.id);
                 paymentManager.set('currency', firm?.currency);
                 invoiceManager.reset();
-                console.log('Firm invoices:', firm?.invoices);
                 firm?.invoices?.forEach((invoice: ExpenseInvoice) => {
-                  console.log('Invoice:', invoice.status); // Affiche le statut actuel
                   if (
                     invoice?.status &&
                     [
@@ -164,6 +154,7 @@ export const ExpensePaymentGeneralInformation = ({
                 });
               }}
               value={paymentManager.firmId?.toString()}
+              disabled={disabled} // Désactivation du select
             >
               <SelectTrigger>
                 <SelectValue placeholder={tInvoicing('invoice.associate_firm')} />
@@ -186,15 +177,16 @@ export const ExpensePaymentGeneralInformation = ({
             <Select
               key={paymentManager.currencyId || 'currency'}
               onValueChange={(e) => {
+                if (disabled) return;
                 const currency = currencies.find((currency) => currency.id == parseInt(e));
                 paymentManager.set('currencyId', currency?.id);
                 paymentManager.set('currency', currency);
                 invoiceManager.init();
               }}
-              disabled={currencies.length == 1}
               defaultValue={
                 paymentManager?.currencyId ? paymentManager?.currencyId?.toString() : undefined
               }
+              disabled={disabled || loading}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder={tInvoicing('controls.currency_select_placeholder')} />
@@ -213,30 +205,18 @@ export const ExpensePaymentGeneralInformation = ({
         </div>
       </div>
 
-      {/* Convertion Rate et Mode */}
+      {/* Mode */}
       <div className="grid grid-cols-2 gap-4">
-        {/* Convertion Rate */}
-        <div className="flex flex-col gap-2">
-          <Label>{tInvoicing('payment.attributes.convertion_rate')}</Label>
-          <Input
-            type="number"
-            placeholder="1"
-            value={paymentManager.convertionRate}
-            onChange={(e) => {
-              paymentManager.set('convertionRate', parseFloat(e.target.value));
-            }}
-          />
-        </div>
-
-        {/* Mode */}
         <div className="flex flex-col gap-2">
           <Label>{tInvoicing('payment.attributes.mode')} (*)</Label>
           <SelectShimmer isPending={loading || false}>
             <Select
               onValueChange={(e) => {
+                if (disabled) return;
                 paymentManager.set('mode', e);
               }}
               value={paymentManager?.mode || ''}
+              disabled={disabled} // Désactivation du select
             >
               <SelectTrigger>
                 <SelectValue placeholder={tInvoicing('payment.attributes.mode')} />
@@ -258,27 +238,39 @@ export const ExpensePaymentGeneralInformation = ({
         {/* Amount */}
         <div className="flex flex-col gap-2">
           <Label>{tInvoicing('payment.attributes.amount')}</Label>
-          <Input
-            type="number"
-            placeholder="0"
-            value={paymentManager.amount}
-            onChange={(e) => {
-              paymentManager.set('amount', parseFloat(e.target.value));
-            }}
-          />
+          {disabled ? (
+            <UneditableInput value={paymentManager.amount?.toString() || '0'} />
+          ) : (
+            <Input
+              type="number"
+              placeholder="0"
+              value={paymentManager.amount}
+              onChange={(e) => {
+                if (disabled) return;
+                paymentManager.set('amount', parseFloat(e.target.value));
+              }}
+              disabled={disabled}
+            />
+          )}
         </div>
 
         {/* Fee */}
         <div className="flex flex-col gap-2">
           <Label>{tInvoicing('payment.attributes.fee')}</Label>
-          <Input
-            type="number"
-            placeholder="0"
-            value={paymentManager.fee}
-            onChange={(e) => {
-              paymentManager.set('fee', parseFloat(e.target.value));
-            }}
-          />
+          {disabled ? (
+            <UneditableInput value={paymentManager.fee?.toString() || '0'} />
+          ) : (
+            <Input
+              type="number"
+              placeholder="0"
+              value={paymentManager.fee}
+              onChange={(e) => {
+                if (disabled) return;
+                paymentManager.set('fee', parseFloat(e.target.value));
+              }}
+              disabled={disabled}
+            />
+          )}
         </div>
       </div>
     </div>

@@ -422,6 +422,37 @@ const updateInvoiceStatusIfExpired = async (quotationId: number): Promise<Expens
     throw error;
   }
 };
+const checkSequentialNumberExists = async (sequentialNumber: string): Promise<boolean> => {
+  try {
+    const response = await axios.get<{ exists: boolean }>(
+      '/public/expensquotation/check-sequential-number', 
+      { params: { sequentialNumber } }
+    );
+    return response.data.exists;
+  } catch (error) {
+    console.error('Error checking sequential number:', error);
+    return false; // Par défaut, considérez que le numéro n'existe pas en cas d'erreur
+  }
+};
+
+const exportQuotationPdf = async (quotationId: number, templateId?: number): Promise<Blob> => {
+  try {
+    let url = `public/templates/quotations/${quotationId}/export-pdf`;
+    if (templateId) {
+      url += `?templateId=${templateId}`;
+    }
+
+    const response = await axios.get(url, {
+      responseType: 'blob'
+    });
+
+    return response.data; // Retourne directement le blob
+  } catch (error) {
+    console.error('Error exporting quotation PDF:', error);
+    throw error;
+  }
+};
+
 export const expense_quotation = {
   factory,
   findPaginated,
@@ -436,5 +467,8 @@ export const expense_quotation = {
   remove,
   validate,
   deletePdfFile,
-  updateInvoiceStatusIfExpired
+  updateInvoiceStatusIfExpired,
+  checkSequentialNumberExists, // Ajoutez cette ligne
+  exportQuotationPdf
+
 };

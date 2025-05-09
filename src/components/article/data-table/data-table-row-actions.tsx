@@ -48,7 +48,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
        
         {/* Historique de l'article */}
         <DropdownMenuItem onClick={() => router.push(`/article/article-history/${article.id}`)}>
-          <History className="h-4 w-4 mr-2" /> {tCommon('history')}
+          <History className="h-4 w-4 mr-2" /> {tCommon('Historique')}
         </DropdownMenuItem>
         {/* Supprimer l'article */}
         <DropdownMenuItem

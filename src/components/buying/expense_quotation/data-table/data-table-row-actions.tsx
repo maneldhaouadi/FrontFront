@@ -12,7 +12,7 @@ import {
 import { DotsHorizontalIcon } from '@radix-ui/react-icons';
 import { Row } from '@tanstack/react-table';
 import { useTranslation } from 'react-i18next';
-import { Copy, FileCheck, Settings2, Telescope, Trash2 } from 'lucide-react';
+import { Copy, Download, FileCheck, Settings2, Telescope, Trash2 } from 'lucide-react';
 import { useExpenseQuotationActions } from './ActionsContext';
 import { useExpenseQuotationManager } from '../hooks/useExpenseQuotationManager';
 
@@ -26,9 +26,9 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { t: tCommon } = useTranslation('common');
   const router = useRouter();
   const quotationManager = useExpenseQuotationManager();
-  const { openDeleteDialog, openDuplicateDialog, openInvoiceDialog } =
-    useExpenseQuotationActions();
-
+  const { openDeleteDialog, openDuplicateDialog, openInvoiceDialog, openDownloadDialog } =
+  useExpenseQuotationActions();
+  
   const targetQuotation = () => {
     quotationManager.set('id', quotation?.id);
     quotationManager.set('sequential', quotation?.sequential);
@@ -49,12 +49,13 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         <DropdownMenuItem onClick={() => router.push('/buying/expense_quotation/' + quotation.id + '?mode=inspect')}>
   <Telescope className="h-5 w-5 mr-2" /> {tCommon('commands.inspect')}
 </DropdownMenuItem>
-        {/* Print */}
-        <DropdownMenuItem
-          onClick={() => {
-            targetQuotation();
-          }}>
+<DropdownMenuItem onClick={() => {
+          targetQuotation();
+          openDownloadDialog?.();
+        }}>
+          <Download className="h-5 w-5 mr-2" /> {tCommon('commands.download')}
         </DropdownMenuItem>
+
         {/* Duplicate */}
         <DropdownMenuItem
           onClick={() => {
@@ -63,6 +64,13 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           }}>
           <Copy className="h-5 w-5 mr-2" /> {tCommon('commands.duplicate')}
         </DropdownMenuItem>
+        {/* Print */}
+        <DropdownMenuItem
+          onClick={() => {
+            targetQuotation();
+          }}>
+        </DropdownMenuItem>
+        {/* Duplicate */}
         {(quotation.status == EXPENSQUOTATION_STATUS.Draft) && (
           <DropdownMenuItem onClick={() => router.push('/buying/expense_quotation/' + quotation.id)}>
             <Settings2 className="h-5 w-5 mr-2" /> {tCommon('commands.modify')}

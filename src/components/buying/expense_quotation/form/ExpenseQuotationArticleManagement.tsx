@@ -133,6 +133,10 @@ export const ExpenseQuotationArticleManagement: React.FC<ExpenseQuotationArticle
                       showDescription={!isArticleDescriptionHidden}
                       currency={quotationManager.currency}
                       edit={edit && !isInspectMode} // Désactive l'édition en mode inspection
+                      existingEntries={articleManager.articles.map(item => ({
+                        ...item.article,
+                        id: Number(item.id) // Conversion de string à number
+                      }))}
                     />
                   </SortableLinks>
                 ))}

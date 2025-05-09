@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { ArticleQuotationEntry, Currency, QuotationTaxEntry, Tax, Article } from '@/types';
-
+import { ArticleQuotationEntry, Currency, ExpenseQuotationTaxEntry, Tax, Article, ExpenseArticleQuotationEntry } from '@/types';
 import {
   Select,
   SelectTrigger,
@@ -17,18 +16,20 @@ import { useTranslation } from 'react-i18next';
 import { Textarea } from '@/components/ui/textarea';
 import { UneditableInput } from '@/components/ui/uneditable/uneditable-input';
 import { api } from '@/api';
-import { Checkbox } from '@/components/ui/checkbox'; // Importez le composant Checkbox
+import { Checkbox } from '@/components/ui/checkbox';
 import { ExpenseInvoiceTaxEntries } from '../../expense_invoice/form/ExpenseInvoiceTaxEntries';
 
 interface ExpenseQuotationArticleItemProps {
   className?: string;
-  article: ArticleQuotationEntry;
-  onChange: (item: ArticleQuotationEntry) => void;
+  article: ExpenseArticleQuotationEntry;
+  onChange: (item:ExpenseArticleQuotationEntry) => void;
   showDescription?: boolean;
   currency?: Currency;
   taxes: Tax[];
   edit?: boolean;
-  articles?: Article[]; // Liste des articles (optionnelle)
+  articles?: Article[];
+  existingEntries?: ExpenseArticleQuotationEntry[] | { id: string; article?: Article }[]; // Modification ici
+
 }
 
 export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemProps> = ({
@@ -39,27 +40,26 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
   currency,
   showDescription = false,
   edit = true,
-  articles: propArticles = [], // Valeur par défaut : un tableau vide
+  articles: propArticles = [],
+  existingEntries = [], // Ajoutez cette ligne avec une valeur par défaut
 }) => {
   const { t: tInvoicing } = useTranslation('invoicing');
-
-  // États pour gérer les articles, le chargement et les erreurs
   const [articles, setArticles] = useState<Article[]>(propArticles);
   const [loading, setLoading] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [useExistingArticle, setUseExistingArticle] = useState<boolean>(false); // Contrôle l'affichage de la liste déroulante
-  const [searchQuery, setSearchQuery] = useState(''); // Ajout pour la recherche
+  const [useExistingArticle, setUseExistingArticle] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [quantityError, setQuantityError] = useState<string | null>(null);
+  const [isExistingArticleSelected, setIsExistingArticleSelected] = useState<boolean>(false);
 
   const digitAfterComma = currency?.digitAfterComma || 3;
   const currencySymbol = currency?.symbol || '$';
 
-  // Récupérer les articles depuis l'API
   useEffect(() => {
     const fetchArticles = async () => {
       setLoading(true);
       setFormError(null);
       try {
-        // Augmentez la limite à 100 ou utilisez un endpoint de recherche
         const response = await api.article.findPaginated(1, 100, 'ASC', 'title');
         setArticles(response.data);
       } catch (error) {
@@ -73,48 +73,122 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
     if (useExistingArticle && articles.length === 0) {
       fetchArticles();
     }
-  }, [useExistingArticle]); // Déclencher quand useExistingArticle change
+  }, [useExistingArticle]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newTitle = e.target.value;
+    
+    if (!isExistingArticleSelected && newTitle) {
+      const isDuplicate = existingEntries.some(entry => {
+        const entryTitle = entry.article?.title ?? (entry as any)?.title;
+        return entryTitle?.toLowerCase() === newTitle.toLowerCase();
+      });
+  
+      if (isDuplicate) {
+        toast.error(tInvoicing('quotation.errors.article_already_exists'));
+        return;
+      }
+    }
     const currentArticle = article?.article || {
       id: 0,
       title: '',
       description: '',
-      category: '',
-      subCategory: '',
-      purchasePrice: 0,
-      salePrice: 0,
-      quantityInStock: 0
+      reference: '',
+      quantityInStock: 1, // Valeur par défaut à 1 au lieu de 0
+      status: 'draft',
+      version: 0,
+      unitPrice: article.unit_price || 0, // Utilise le prix unitaire saisi
+      notes: '',
+      isDeletionRestricted: false
     };
   
     onChange({
       ...article,
       article: {
         ...currentArticle,
-        title: e.target.value,
-        // Les autres propriétés obligatoires sont conservées
-        id: currentArticle.id // On conserve l'ID existant
-      }
+      title: newTitle,
+        unitPrice: article.unit_price || 0, // Maintient le prix unitaire
+        quantityInStock: article.quantity || 1 // Maintient la quantité
+      },
+      quantity: article.quantity || 1,
+      orderedQuantity: article.orderedQuantity || 0,
+      originalStock: article.originalStock || 0,
+      unit_price: article.unit_price || 0
     });
   };
 
-  const handleSelectArticle = (value: string) => {
+  const handleSelectArticle = async (value: string) => {
     const selectedArticle = articles.find((art) => art.id === parseInt(value));
     if (selectedArticle) {
+      try {
+        // Vérifier si un article avec le même titre existe déjà dans la liste
+        const isDuplicate = existingEntries.some(entry => {
+          const entryTitle = entry.article?.title ?? (entry as any)?.title;
+          return entryTitle?.toLowerCase() === selectedArticle.title?.toLowerCase();
+        });
+  
+        if (isDuplicate) {
+          toast.error(tInvoicing('quotation.errors.article_already_exists'));
+          return;
+        }
+  
+        if (selectedArticle.quantityInStock <= 0) {
+          setQuantityError(tInvoicing('quotation.errors.quantity_unavailable'));
+          toast.error(tInvoicing('quotation.errors.quantity_unavailable'));
+          return;
+        }
+        
+        const unitPrice = Math.round(Number(selectedArticle.unitPrice)) || 0;
+        
+        onChange({
+          ...article,
+          article: {
+            ...selectedArticle,
+            title: selectedArticle.title || '',
+            description: selectedArticle.description || '',
+            reference: selectedArticle.reference || '',
+            quantityInStock: selectedArticle.quantityInStock,
+            status: selectedArticle.status || 'draft',
+            version: selectedArticle.version || 0,
+            unitPrice: unitPrice,
+          },
+          quantity: 1,
+          orderedQuantity: 1,
+          originalStock: selectedArticle.quantityInStock,
+          unit_price: unitPrice
+        });
+        
+        setIsExistingArticleSelected(true);
+        setQuantityError(null);
+      } catch (error) {
+        console.error('Error selecting article:', error);
+        toast.error(tInvoicing('quotation.errors.article_selection_failed'));
+      }
+    }
+  };
+
+  const handleUseExistingArticleChange = (checked: boolean) => {
+    setUseExistingArticle(checked);
+    if (!checked) {
+      setIsExistingArticleSelected(false);
       onChange({
         ...article,
         article: {
-          id: selectedArticle.id,
-          title: selectedArticle.title,
-          description: selectedArticle.description || '',
-          category: selectedArticle.category || '',
-          subCategory: selectedArticle.subCategory || '',
-          purchasePrice: selectedArticle.purchasePrice || 0,
-          salePrice: selectedArticle.salePrice || 0,
-          quantityInStock: selectedArticle.quantityInStock || 0
+          id: 0,
+          title: '',
+          description: '',
+          reference: '',
+          quantityInStock: 0,
+          status: 'draft',
+          version: 0,
+          unitPrice: 0,
+          notes: '',
+          isDeletionRestricted: false
         },
-        unit_price: selectedArticle.purchasePrice || 0,
-        quantity: 1 // Valeur par défaut
+        quantity: 1,
+        orderedQuantity: 0,
+        originalStock: 0,
+        unit_price: 0
       });
     }
   };
@@ -124,11 +198,13 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
       id: 0,
       title: '',
       description: '',
-      category: '',
-      subCategory: '',
-      purchasePrice: 0,
-      salePrice: 0,
-      quantityInStock: 0
+      reference: '',
+      quantityInStock: 0,
+      status: 'draft',
+      version: 0,
+      unitPrice: 0,
+      notes: '',
+      isDeletionRestricted: false
     };
   
     onChange({
@@ -136,8 +212,6 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
       article: {
         ...currentArticle,
         description: e.target.value,
-        // On conserve toutes les autres propriétés obligatoires
-        id: currentArticle.id // On conserve l'ID existant
       }
     });
   };
@@ -145,10 +219,41 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
   const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const quantity = e.target.value;
     const regex = new RegExp(`^\\d*(\\.\\d{0,${digitAfterComma}})?$`);
+    
     if (quantity.match(regex)) {
+      const newQuantity = parseFloat(quantity);
+      
+      if (isExistingArticleSelected && article.originalStock !== undefined) {
+        if (newQuantity > article.originalStock) {
+          setQuantityError(tInvoicing('quotation.errors.quantity_exceeds', { 
+            available: article.originalStock 
+          }));
+          return;
+        }
+        setQuantityError(null);
+      }
+      
+      const updatedArticle = article.article ? {
+        ...article.article,
+        quantityInStock: newQuantity
+      } : {
+        id: 0, // Valeur par défaut obligatoire
+        title: '',
+        description: '',
+        reference: '',
+        quantityInStock: newQuantity,
+        status: 'draft',
+        version: 0,
+        unitPrice: 0,
+        notes: '',
+        isDeletionRestricted: false
+      };
+      
       onChange({
         ...article,
-        quantity: parseFloat(quantity),
+        quantity: newQuantity,
+        orderedQuantity: newQuantity,
+        article: updatedArticle
       });
     }
   };
@@ -157,13 +262,31 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
     const unit_price = e.target.value;
     const regex = new RegExp(`^\\d*(\\.\\d{0,${digitAfterComma}})?$`);
     if (unit_price.match(regex)) {
+      const newUnitPrice = parseFloat(unit_price);
+      
+      const updatedArticle = article.article ? {
+        ...article.article,
+        unitPrice: newUnitPrice
+      } : {
+        id: 0, // Valeur par défaut obligatoire
+        title: '',
+        description: '',
+        reference: '',
+        quantityInStock: 1,
+        status: 'draft',
+        version: 0,
+        unitPrice: newUnitPrice,
+        notes: '',
+        isDeletionRestricted: false
+      };
+      
       onChange({
         ...article,
-        unit_price: parseFloat(unit_price),
+        unit_price: newUnitPrice,
+        article: updatedArticle
       });
     }
   };
-
   const handleDiscountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const discount = e.target.value;
     const { discount_type } = article;
@@ -174,9 +297,6 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
         ...article,
         discount: percentage,
       });
-
-    } else if (discount_type === DISCOUNT_TYPE.AMOUNT) {
-      const regex = new RegExp(`^\\d*(\\.\\d{0,${3}})?$`);
     } else if (discount_type === DISCOUNT_TYPE.AMOUNT) {
       const regex = new RegExp(`^\\d*(\\.\\d{0,${digitAfterComma}})?$`);
       if (regex.test(discount)) {
@@ -191,43 +311,42 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
   const handleDiscountTypeChange = (value: string) => {
     onChange({
       ...article,
-
       discount_type: value === 'PERCENTAGE' ? DISCOUNT_TYPE.PERCENTAGE : DISCOUNT_TYPE.AMOUNT,
-      discount: 0 // Reset discount to 0 when changing the typ
+      discount: 0
     });
   };
 
   const handleTaxChange = (value: string, index: number) => {
     const selectedTax = taxes.find((tax) => tax.id === parseInt(value));
-    const updatedTaxes = [...(article.articleQuotationEntryTaxes || [])];
+    const updatedTaxes = [...(article.articleExpensQuotationEntryTaxes || [])];
     if (selectedTax) {
       updatedTaxes[index] = { tax: selectedTax };
     } else {
       updatedTaxes.splice(index, 1);
     }
-    onChange({ ...article, articleQuotationEntryTaxes: updatedTaxes });
+    onChange({ ...article, articleExpensQuotationEntryTaxes: updatedTaxes });
   };
 
   const handleTaxDelete = (index: number) => {
-    const updatedTaxes = article.articleQuotationEntryTaxes?.filter((_, i) => i !== index);
-    onChange({ ...article, articleQuotationEntryTaxes: updatedTaxes });
+    const updatedTaxes = article.articleExpensQuotationEntryTaxes?.filter((_, i) => i !== index);
+    onChange({ ...article, articleExpensQuotationEntryTaxes: updatedTaxes });
   };
 
   const handleAddTax = () => {
-    if ((article.articleQuotationEntryTaxes?.length || 0) >= taxes.length) {
+    if ((article.articleExpensQuotationEntryTaxes?.length || 0) >= taxes.length) {
       toast.warning(tInvoicing('quotation.errors.surpassed_tax_limit'));
       return;
     }
     onChange({
       ...article,
-      articleQuotationEntryTaxes: [
-        ...(article.articleQuotationEntryTaxes || []),
-        {} as QuotationTaxEntry,
+      articleExpensQuotationEntryTaxes: [
+        ...(article.articleExpensQuotationEntryTaxes || []),
+        {} as ExpenseQuotationTaxEntry,
       ],
     });
   };
 
-  const selectedTaxIds = article.articleQuotationEntryTaxes?.map((t) => t.tax?.id) || [];
+  const selectedTaxIds = article.articleExpensQuotationEntryTaxes?.map((t) => t.tax?.id) || [];
 
   return (
     <div className={cn('flex flex-row items-center gap-6 h-full', className)}>
@@ -242,56 +361,61 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
                   <Checkbox
                     id="use-existing-article"
                     checked={useExistingArticle}
-                    onCheckedChange={(checked) => setUseExistingArticle(!!checked)}
+                    onCheckedChange={handleUseExistingArticleChange}
                   />
                   <Label htmlFor="use-existing-article">
                     {tInvoicing('Article existant')}
                   </Label>
                 </div>
                 {useExistingArticle ? (
-  <Select onValueChange={handleSelectArticle}>
-    <SelectTrigger>
-      <SelectValue placeholder="Sélectionnez un article" />
-    </SelectTrigger>
-    <SelectContent>
-      {/* Ajoutez un champ de recherche */}
-      <div className="p-2">
-        <Input
-          placeholder="Rechercher un article..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-      </div>
-      
-      {loading ? (
-        <SelectItem value="loading" disabled>
-          Chargement...
-        </SelectItem>
-      ) : articles.length > 0 ? (
-        articles
-          .filter(article => 
-            article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (article.reference && article.reference.toLowerCase().includes(searchQuery.toLowerCase()))
-          )
-          .map((art) => (
-            <SelectItem key={art.id} value={art.id.toString()}>
-              {art.title} {art.reference ? `(${art.reference})` : ''}
-            </SelectItem>
-          ))
-      ) : (
-        <SelectItem value="no-articles" disabled>
-          Aucun article disponible
-        </SelectItem>
-      )}
-    </SelectContent>
-  </Select>
-) : (
-  <Input
-    placeholder="Saisissez un titre"
-    value={article.article?.title}
-    onChange={handleTitleChange}
-  />
-)}
+                  <Select onValueChange={handleSelectArticle}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sélectionnez un article" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <div className="p-2">
+                        <Input
+                          placeholder="Rechercher un article..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                      </div>
+                      
+                      {loading ? (
+                        <SelectItem value="loading" disabled>
+                          Chargement...
+                        </SelectItem>
+                      ) : articles.length > 0 ? (
+                        articles
+                          .filter(article => 
+                            article?.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            (article.reference && article.reference.toLowerCase().includes(searchQuery.toLowerCase()))
+                          )
+                          .map((art) => (
+                            <SelectItem 
+                              key={art.id} 
+                              value={art.id.toString()}
+                              disabled={art.quantityInStock <= 0}
+                            >
+                              {art.title} {art.reference ? `(${art.reference})` : ''}
+                              {art.quantityInStock <= 0 && ` (${tInvoicing('quotation.errors.out_of_stock')})`}
+                            </SelectItem>
+                          ))
+                      ) : (
+                        <SelectItem value="no-articles" disabled>
+                          Aucun article disponible
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    placeholder="Saisissez un titre"
+                    value={article.article?.title}
+                    onChange={handleTitleChange}
+                    disabled={isExistingArticleSelected}
+                  />
+                )}
               </div>
             ) : (
               <UneditableInput value={article.article?.title} />
@@ -301,12 +425,32 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
           <div className="w-1/5">
             <Label className="mx-1">{tInvoicing('article.attributes.quantity')}</Label>
             {edit ? (
-              <Input
-                type="number"
-                placeholder="0"
-                value={article.quantity}
-                onChange={handleQuantityChange}
-              />
+              <div className="flex flex-col">
+                <Input
+  type="number"
+  placeholder="0"
+  value={article.quantity}
+  onChange={handleQuantityChange}
+  min={1}
+  max={isExistingArticleSelected ? article.originalStock : undefined}
+/>
+                {quantityError && (
+                  <span className="text-red-500 text-xs mt-1">{quantityError}</span>
+                )}
+                {isExistingArticleSelected && article.originalStock !== undefined && (
+                  <div className="text-xs text-gray-500 mt-1 space-y-1">
+                    <div>
+                      {tInvoicing('original_stock')}: {article.originalStock}
+                    </div>
+                    <div>
+                      {tInvoicing('ordered_quantity')}: {article.orderedQuantity || 0}
+                    </div>
+                    <div>
+                      {tInvoicing('remaining_stock')}: {article.originalStock - (article.orderedQuantity || 0)}
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
               <UneditableInput value={article.quantity} />
             )}
@@ -321,6 +465,7 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
                   placeholder="0"
                   value={article.unit_price}
                   onChange={handleUnitPriceChange}
+                  disabled={isExistingArticleSelected}
                 />
               ) : (
                 <UneditableInput value={article.unit_price} />
@@ -341,6 +486,7 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
                     value={article.article?.description}
                     onChange={handleDescriptionChange}
                     rows={3}
+                    disabled={isExistingArticleSelected}
                   />
                 </>
               ) : (
@@ -351,7 +497,7 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
                       disabled
                       value={article.article?.description}
                       className="resize-none"
-                      rows={3 + (article?.articleQuotationEntryTaxes?.length || 0)}
+                      rows={3 + (article?.articleExpensQuotationEntryTaxes?.length || 0)}
                     />
                   </>
                 )

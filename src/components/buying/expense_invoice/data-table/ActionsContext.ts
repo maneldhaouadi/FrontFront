@@ -4,6 +4,7 @@ interface ExpenseInvoiceActionsContextProps {
   openDeleteDialog?: () => void;
   openDuplicateDialog?: () => void;
   openInvoiceDialog?: () => void;
+  openDownloadDialog?: () => void;
   searchTerm?: string;
   setSearchTerm?: (value: string) => void;
   page?: number;

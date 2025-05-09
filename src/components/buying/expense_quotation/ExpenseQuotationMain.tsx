@@ -17,6 +17,7 @@ import { ExpenseQuotationDuplicateDialog } from './dialogs/ExpenseQuotationDupli
 import { ExpenseQuotationInvoiceDialog } from './dialogs/ExpenseQuotationInvoiceDialog';
 import { ExpenseQuotationActionsContext } from './data-table/ActionsContext';
 import { EXPENSQUOTATION_STATUS } from '@/types'; // Assurez-vous d'importer le statut approprié
+import { ExpenseQuotationDownloadDialog } from './dialogs/ExpenseQuotationDownloadDialog';
 
 interface ExpenseQuotationMainProps {
   className?: string;
@@ -26,6 +27,8 @@ export const ExpenseQuotationMain: React.FC<ExpenseQuotationMainProps> = ({ clas
   const router = useRouter();
   const { t: tCommon, ready: commonReady } = useTranslation('common');
   const { t: tInvoicing, ready: invoicingReady } = useTranslation('invoicing');
+  const [downloadDialog, setDownloadDialog] = React.useState(false);
+const [isDownloadPending, setIsDownloadPending] = React.useState(false);
   const { setRoutes } = useBreadcrumb();
   React.useEffect(() => {
     setRoutes([
@@ -90,6 +93,42 @@ export const ExpenseQuotationMain: React.FC<ExpenseQuotationMainProps> = ({ clas
       }
     });
 
+    const handleDownload = async (templateId?: number) => {
+      if (!quotationManager.id) {
+        toast.error("Aucun devis sélectionné");
+        return;
+      }
+    
+      setIsDownloadPending(true);
+      try {
+        // Appel API simplifié
+        const pdfBlob = await api.expense_quotation.exportQuotationPdf(
+          quotationManager.id,
+          templateId
+        );
+    
+        // Gestion du téléchargement
+        const url = window.URL.createObjectURL(pdfBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `devis-${quotationManager.sequential || quotationManager.id}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+    
+        // Nettoyage
+        setTimeout(() => {
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+        }, 100);
+    
+      } catch (error) {
+        console.error("Erreur de téléchargement:", error);
+        toast.error(`Erreur lors du téléchargement: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+      } finally {
+        setIsDownloadPending(false);
+      }
+    };
+
   
   // Mettre à jour le statut des quotations lors de l'affichage
   useEffect(() => {
@@ -116,6 +155,7 @@ export const ExpenseQuotationMain: React.FC<ExpenseQuotationMainProps> = ({ clas
     openDeleteDialog: () => setDeleteDialog(true),
     openDuplicateDialog: () => setDuplicateDialog(true),
     openInvoiceDialog: () => setInvoiceDialog(true),
+    openDownloadDialog: () => setDownloadDialog(true), // Cette ligne doit être présente
     //search, filtering, sorting & paging
     searchTerm,
     setSearchTerm,
@@ -237,6 +277,13 @@ export const ExpenseQuotationMain: React.FC<ExpenseQuotationMainProps> = ({ clas
         }}
         onClose={() => setInvoiceDialog(false)}
       />
+      <ExpenseQuotationDownloadDialog
+  id={quotationManager?.id || 0}
+  open={downloadDialog} // Doit être true quand on clique
+  onDownload={handleDownload}
+  isDownloadPending={isDownloadPending}
+  onClose={() => setDownloadDialog(false)}
+/>
       <ExpenseQuotationActionsContext.Provider value={context}>
         <Card className={className}>
           <CardHeader>

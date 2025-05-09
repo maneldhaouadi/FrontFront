@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -15,8 +15,10 @@ import { useTranslation } from 'react-i18next';
 import { Textarea } from '@/components/ui/textarea';
 import { UneditableInput } from '@/components/ui/uneditable/uneditable-input';
 import { ExpenseArticleInvoiceEntry, ExpenseInvoiceTaxEntry } from '@/types/expense_invoices';
-import {Article, Currency, Tax } from '@/types';
+import { Article, Currency, Tax } from '@/types';
 import { ExpenseInvoiceTaxEntries } from './ExpenseInvoiceTaxEntries';
+import { Checkbox } from '@/components/ui/checkbox';
+import { api } from '@/api';
 
 interface ExpenseInvoiceArticleItemProps {
   className?: string;
@@ -26,6 +28,7 @@ interface ExpenseInvoiceArticleItemProps {
   currency?: Currency;
   taxes: Tax[];
   edit?: boolean;
+  articles?: Article[];
 }
 
 export const ExpenseInvoiceArticleItem: React.FC<ExpenseInvoiceArticleItemProps> = ({
@@ -35,52 +38,109 @@ export const ExpenseInvoiceArticleItem: React.FC<ExpenseInvoiceArticleItemProps>
   taxes,
   currency,
   showDescription = false,
-  edit = true
+  edit = true,
+  articles: propArticles = []
 }) => {
   const { t: tInvoicing } = useTranslation('invoicing');
 
+  const [articles, setArticles] = useState<Article[]>(propArticles);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [useExistingArticle, setUseExistingArticle] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
   const digitAfterComma = currency?.digitAfterComma || 3;
   const currencySymbol = currency?.symbol || '$';
+
+  useEffect(() => {
+    const fetchArticles = async () => {
+      setLoading(true);
+      try {
+        const response = await api.article.findPaginated(1, 100, 'ASC', 'title');
+        setArticles(response.data);
+      } catch (error) {
+        toast.error(tInvoicing('error.loading_articles'));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (useExistingArticle && articles.length === 0) {
+      fetchArticles();
+    }
+  }, [useExistingArticle]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const currentArticle = article.article || {
       id: 0,
       title: '',
       description: '',
-      category: '',
-      subCategory: '',
-      purchasePrice: 0,
-      salePrice: 0,
-      quantityInStock: 0
+      reference: '',
+      quantityInStock: 0,
+      status: 'draft',
+      version: 0,
+      unitPrice: 0,
+      notes: '',
+      isDeletionRestricted: false
     };
-  
+
     onChange({
       ...article,
       article: {
         ...currentArticle,
-        id: parseInt(e.target.value),
         title: e.target.value
       }
     });
   };
+
+  const handleSelectArticle = (value: string) => {
+    const selectedArticle = articles.find((art) => art.id === parseInt(value));
+    if (selectedArticle) {
+      const unitPrice = Math.round(Number(selectedArticle.unitPrice)) || 0;
+      
+      onChange({
+        ...article,
+        article: {
+          id: selectedArticle.id,
+          title: selectedArticle.title || '',
+          description: selectedArticle.description || '',
+          reference: selectedArticle.reference || '',
+          quantityInStock: selectedArticle.quantityInStock || 0,
+          status: selectedArticle.status || 'draft',
+          version: selectedArticle.version || 0,
+          unitPrice: unitPrice,
+          notes: selectedArticle.notes,
+          isDeletionRestricted: selectedArticle.isDeletionRestricted,
+          createdAt: selectedArticle.createdAt,
+          updatedAt: selectedArticle.updatedAt,
+          deletedAt: selectedArticle.deletedAt
+        },
+        quantity: selectedArticle.quantityInStock || 1,
+        unit_price: unitPrice
+      });
+    }
+  };
+
   const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (!article.article) {
-      throw new Error("Article object is required");
+      const newArticle = {
+        id: 0,
+        title: '',
+        description: e.target.value,
+        reference: '',
+        quantityInStock: 0,
+        status: 'draft',
+        version: 0,
+        unitPrice: 0,
+        notes: '',
+        isDeletionRestricted: false
+      };
+      onChange({
+        ...article,
+        article: newArticle
+      });
+      return;
     }
-  
-    const requiredFields: (keyof Article)[] = [
-      'title', 'category', 'subCategory', 
-      'purchasePrice', 'salePrice', 'quantityInStock'
-    ];
-  
-    const missingFields = requiredFields.filter(
-      field => article.article![field] === undefined
-    );
-  
-    if (missingFields.length > 0) {
-      throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
-    }
-  
+
     onChange({
       ...article,
       article: {
@@ -92,7 +152,7 @@ export const ExpenseInvoiceArticleItem: React.FC<ExpenseInvoiceArticleItemProps>
 
   const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const quantity = e.target.value;
-    const regex = new RegExp(`^\\d*(\\.\\d{0,${3}})?$`);
+    const regex = new RegExp(`^\\d*(\\.\\d{0,${digitAfterComma}})?$`);
     if (quantity.match(regex)) {
       onChange({
         ...article,
@@ -103,7 +163,7 @@ export const ExpenseInvoiceArticleItem: React.FC<ExpenseInvoiceArticleItemProps>
 
   const handleUnitPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const unitPrice = e.target.value;
-    const regex = new RegExp(`^\\d*(\\.\\d{0,${3}})?$`);
+    const regex = new RegExp(`^\\d*(\\.\\d{0,${digitAfterComma}})?$`);
     if (unitPrice.match(regex)) {
       onChange({
         ...article,
@@ -123,7 +183,7 @@ export const ExpenseInvoiceArticleItem: React.FC<ExpenseInvoiceArticleItemProps>
         discount: percentage
       });
     } else if (discount_type === DISCOUNT_TYPE.AMOUNT) {
-      const regex = new RegExp(`^\\d*(\\.\\d{0,${3}})?$`);
+      const regex = new RegExp(`^\\d*(\\.\\d{0,${digitAfterComma}})?$`);
       if (regex.test(discount)) {
         onChange({
           ...article,
@@ -137,7 +197,7 @@ export const ExpenseInvoiceArticleItem: React.FC<ExpenseInvoiceArticleItemProps>
     onChange({
       ...article,
       discount_type: value === 'PERCENTAGE' ? DISCOUNT_TYPE.PERCENTAGE : DISCOUNT_TYPE.AMOUNT,
-      discount: 0 // Reset discount to 0 when changing the type
+      discount: 0
     });
   };
 
@@ -176,13 +236,62 @@ export const ExpenseInvoiceArticleItem: React.FC<ExpenseInvoiceArticleItemProps>
         <div className="flex flex-row gap-2 my-1">
           {/* Title */}
           <div className="w-3/5">
-           <Label className="mx-1">{tInvoicing('article.attributes.title')}</Label>
+            <Label className="mx-1">{tInvoicing('article.attributes.title')}</Label>
             {edit ? (
-              <Input
-                placeholder="Title"
-                value={article.article?.title}
-                onChange={handleTitleChange}
-              />
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="use-existing-article"
+                    checked={useExistingArticle}
+                    onCheckedChange={(checked) => setUseExistingArticle(!!checked)}
+                  />
+                  <Label htmlFor="use-existing-article">
+                    {tInvoicing('Article Existant')}
+                  </Label>
+                </div>
+                {useExistingArticle ? (
+                  <Select onValueChange={handleSelectArticle}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={tInvoicing('Select an article')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <div className="p-2">
+                        <Input
+                          placeholder={tInvoicing('Search an article...')}
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                      </div>
+                      {loading ? (
+                        <SelectItem value="loading" disabled>
+                          {tInvoicing('Loading...')}
+                        </SelectItem>
+                      ) : articles.length > 0 ? (
+                        articles
+                          .filter(article => 
+                            article?.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            (article.reference && article.reference.toLowerCase().includes(searchQuery.toLowerCase()))
+                          )
+                          .map((art) => (
+                            <SelectItem key={art.id} value={art.id.toString()}>
+                              {art.title} {art.reference ? `(${art.reference})` : ''}
+                            </SelectItem>
+                          ))
+                      ) : (
+                        <SelectItem value="no-articles" disabled>
+                          {tInvoicing('No articles available')}
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    placeholder={tInvoicing('Enter a title')}
+                    value={article.article?.title}
+                    onChange={handleTitleChange}
+                  />
+                )}
+              </div>
             ) : (
               <UneditableInput value={article.article?.title} />
             )}
@@ -229,7 +338,7 @@ export const ExpenseInvoiceArticleItem: React.FC<ExpenseInvoiceArticleItemProps>
                     placeholder="Description"
                     className="resize-none"
                     value={article.article?.description}
-                    onChange={(e) => handleDescriptionChange(e)}
+                    onChange={handleDescriptionChange}
                     rows={3}
                   />
                 </>
@@ -241,7 +350,6 @@ export const ExpenseInvoiceArticleItem: React.FC<ExpenseInvoiceArticleItemProps>
                       disabled
                       value={article.article?.description}
                       className="resize-none"
-                      onClick={() => {}}
                       rows={3 + (article?.expenseArticleInvoiceEntryTaxes?.length || 0)}
                     />
                   </>

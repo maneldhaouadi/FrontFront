@@ -242,50 +242,32 @@ export const ExpenseInvoiceUpdateForm = ({ className, invoiceId }: ExpenseInvoic
       // Convertir les articles en DTO
       const articlesDto: ExpenseArticleInvoiceEntry[] = articleManager.getArticles()?.map((article) => {
         // Création d'un objet article complet avec valeurs par défaut
-        const fullArticle: Article = {
-          id: article?.article?.id ?? 0,
-          title: article?.article?.title || '',
-          description: !controlManager.isArticleDescriptionHidden 
-            ? article?.article?.description || '' 
-            : '',
-          category: article?.article?.category || '',
-          subCategory: article?.article?.subCategory || '',
-          purchasePrice: article?.article?.purchasePrice || 0,
-          salePrice: article?.article?.salePrice || 0,
-          quantityInStock: article?.article?.quantityInStock || 0,
-          // Propriétés optionnelles
-          status: article?.article?.status,
-          version: article?.article?.version,
-          history: article?.article?.history,
-          barcode: article?.article?.barcode,
-          qrCode: article?.article?.qrCode,
-          isDeletionRestricted: article?.article?.isDeletionRestricted,
-          // Propriétés héritées de DatabaseEntity
-          createdAt: article?.article?.createdAt,
-          updatedAt: article?.article?.updatedAt,
-          deletedAt: article?.article?.deletedAt
-        };
-      
-        return {
-          id: article?.id,
-          article: fullArticle,
-          articleId: article?.article?.id ?? 0,
-          quantity: article?.quantity || 0,
-          unit_price: article?.unit_price || 0,
-          discount: article?.discount || 0,
-          discount_type: article?.discount_type === 'PERCENTAGE' 
-            ? DISCOUNT_TYPE.PERCENTAGE 
-            : DISCOUNT_TYPE.AMOUNT,
-          expenseArticleInvoiceEntryTaxes: article?.expenseArticleInvoiceEntryTaxes || [],
-          taxes: article?.expenseArticleInvoiceEntryTaxes
-            ?.map((entry) => entry?.tax?.id)
-            .filter((id): id is number => id !== undefined),
-          // Propriétés héritées de DatabaseEntity
-          createdAt: article?.createdAt,
-          updatedAt: article?.updatedAt,
-          deletedAt: article?.deletedAt
-        };
-      }) || [];
+         const mappedArticle = {
+                id: article?.id,
+                article: {
+                  id: article?.article?.id ?? 0,
+                  title: article?.article?.title || '',
+                  description: article?.article?.description || '',
+                  reference: article?.article?.reference || '', // Ajout de la référence obligatoire
+                  quantityInStock: article?.article?.quantityInStock || 0,
+                  status: article?.article?.status || 'draft', // Valeur par défaut
+                  unitPrice: article?.article?.unitPrice || 0,// Ajout du prix unitaire,
+                  version:article?.article?.version || 0
+                   
+        
+                },
+                quantity: article?.quantity || 0,
+                unit_price: article?.unit_price || 0,
+                discount: article?.discount || 0,
+                discount_type: article?.discount_type === 'PERCENTAGE' 
+                  ? DISCOUNT_TYPE.PERCENTAGE 
+                  : DISCOUNT_TYPE.AMOUNT,
+                taxes: article?.expenseArticleInvoiceEntryTaxes?.map((entry) => entry?.tax?.id).filter(Boolean) as number[],
+                expenseArticleInvoiceEntryTaxes: article?.expenseArticleInvoiceEntryTaxes || []
+              };
+            
+              return mappedArticle;
+            }) || [];
   
       // Gestion des fichiers PDF
       let pdfFileId = invoiceManager.pdfFileId; // ID du fichier PDF existant

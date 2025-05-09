@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Save } from 'lucide-react';
+import { EyeOff, Save } from 'lucide-react';
 import { useRouter } from 'next/router';
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
@@ -10,7 +10,8 @@ interface ExpensePaymentControlSectionProps {
   handleSubmit?: () => void;
   reset: () => void;
   loading?: boolean;
-  isCreateMode?: boolean; // <-- Ajoutez cette prop
+  isCreateMode?: boolean;
+  isInspectMode?: boolean;
 }
 
 export const ExpensePaymentControlSection = ({
@@ -19,11 +20,11 @@ export const ExpensePaymentControlSection = ({
   handleSubmit,
   reset,
   loading,
-  isCreateMode = false // <-- Valeur par défaut
+  isCreateMode = false,
+  isInspectMode = false,
 }: ExpensePaymentControlSectionProps) => {
   const router = useRouter();
   const { t: tCommon } = useTranslation('common');
-
   const [calculatorInput, setCalculatorInput] = useState('');
   const [calculatorResult, setCalculatorResult] = useState('');
 
@@ -88,45 +89,64 @@ export const ExpensePaymentControlSection = ({
   return (
     <div className={className}>
       <div className="flex flex-col w-full gap-2">
-        <Button className="flex items-center" onClick={handleSubmit}>
-          <Save className="h-5 w-5" />
-          <span className="mx-1">{tCommon('commands.save')}</span>
-        </Button>
-        <Button 
-          className="flex items-center" 
-          variant={'outline'} 
-          onClick={reset}
-          disabled={isCreateMode} // <-- Désactivation conditionnelle
-        >
-          <Save className="h-5 w-5" />
-          <span className="mx-1">{tCommon('commands.initialize')}</span>
-        </Button>
+        {isInspectMode ?(
+          <Button 
+            variant="outline" 
+            className="flex items-center gap-2"
+            onClick={() => router.back()}
+          >
+            <EyeOff className="h-5 w-5" />
+            <span>{tCommon('commands.exit_inspect_mode')}</span>
+          </Button>
+        ) : (
+          <>
+            <Button 
+              className="flex items-center gap-2" 
+              onClick={handleSubmit}
+              disabled={loading}
+            >
+              <Save className="h-5 w-5" />
+              <span>{tCommon('commands.save')}</span>
+            </Button>
+            <Button 
+              className="flex items-center gap-2" 
+              variant={'outline'} 
+              onClick={reset}
+              disabled={isCreateMode || loading}
+            >
+              <Save className="h-5 w-5" />
+              <span>{tCommon('commands.initialize')}</span>
+            </Button>
+          </>
+        )}
 
-        {/* Calculator UI */}
-        <div className="w-64 mx-auto mt-10 bg-gray-100 rounded-lg shadow-lg p-4">
-          <div className="bg-white h-16 mb-4 flex items-center justify-end px-4 text-3xl font-bold rounded">
-            {display}
+        {/* Calculator UI - masqué en mode inspection */}
+        {!isInspectMode  && (
+          <div className="w-64 mx-auto mt-10 bg-gray-100 rounded-lg shadow-lg p-4">
+            <div className="bg-white h-16 mb-4 flex items-center justify-end px-4 text-3xl font-bold rounded">
+              {display}
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              <Button onClick={() => inputDigit(7)}>7</Button>
+              <Button onClick={() => inputDigit(8)}>8</Button>
+              <Button onClick={() => inputDigit(9)}>9</Button>
+              <Button onClick={() => performOperation('/')}>/</Button>
+              <Button onClick={() => inputDigit(4)}>4</Button>
+              <Button onClick={() => inputDigit(5)}>5</Button>
+              <Button onClick={() => inputDigit(6)}>6</Button>
+              <Button onClick={() => performOperation('*')}>*</Button>
+              <Button onClick={() => inputDigit(1)}>1</Button>
+              <Button onClick={() => inputDigit(2)}>2</Button>
+              <Button onClick={() => inputDigit(3)}>3</Button>
+              <Button onClick={() => performOperation('-')}>-</Button>
+              <Button onClick={() => inputDigit(0)}>0</Button>
+              <Button onClick={inputDecimal}>.</Button>
+              <Button onClick={() => performOperation('=')}>=</Button>
+              <Button onClick={() => performOperation('+')}>+</Button>
+              <Button onClick={clearCalculator} className="col-span-4">Clear</Button>
+            </div>
           </div>
-          <div className="grid grid-cols-4 gap-2">
-            <Button onClick={() => inputDigit(7)}>7</Button>
-            <Button onClick={() => inputDigit(8)}>8</Button>
-            <Button onClick={() => inputDigit(9)}>9</Button>
-            <Button onClick={() => performOperation('/')}>/</Button>
-            <Button onClick={() => inputDigit(4)}>4</Button>
-            <Button onClick={() => inputDigit(5)}>5</Button>
-            <Button onClick={() => inputDigit(6)}>6</Button>
-            <Button onClick={() => performOperation('*')}>*</Button>
-            <Button onClick={() => inputDigit(1)}>1</Button>
-            <Button onClick={() => inputDigit(2)}>2</Button>
-            <Button onClick={() => inputDigit(3)}>3</Button>
-            <Button onClick={() => performOperation('-')}>-</Button>
-            <Button onClick={() => inputDigit(0)}>0</Button>
-            <Button onClick={inputDecimal}>.</Button>
-            <Button onClick={() => performOperation('=')}>=</Button>
-            <Button onClick={() => performOperation('+')}>+</Button>
-            <Button onClick={clearCalculator} className="col-span-4">Clear</Button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

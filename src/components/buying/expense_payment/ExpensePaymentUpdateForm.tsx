@@ -28,15 +28,18 @@ import { ExpensePaymentControlSection } from './form/ExpensePaymentControlSectio
 interface ExpensePaymentFormProps {
   className?: string;
   paymentId: string;
+  isInspectMode?: boolean; // Nouvelle prop pour le mode inspection
 }
 
-export const ExpensePaymentUpdateForm = ({ className, paymentId }: ExpensePaymentFormProps) => {
+export const ExpensePaymentUpdateForm = ({ className, paymentId}: ExpensePaymentFormProps) => {
   const router = useRouter();
   const { t: tCommon } = useTranslation('common');
   const { t: tInvoicing } = useTranslation('invoicing');
   const { setRoutes } = useBreadcrumb();
   const paymentManager = useExpensePaymentManager();
   const invoiceManager = useExpensePaymentInvoiceManager();
+  const isInspectMode = router.query.mode === 'inspect'; // Ajoutez cette ligne
+  const [invoicesLoaded, setInvoicesLoaded] = React.useState(false);
 
   // Fetch payment data
   const {
@@ -81,78 +84,77 @@ export const ExpensePaymentUpdateForm = ({ className, paymentId }: ExpensePaymen
   const fetching =
     isFetchPending || isFetchFirmsPending || isFetchCurrenciesPending || isFetchCabinetPending;
 
-  const setPaymentData = (data: Partial<ExpensePayment>) => {
-    if (!data) return;
-
-    // Payment infos
-    paymentManager.setPayment({
-      ...data,
-      firm: firms?.find((firm) => firm.id === data.firmId),
-      sequentialNumbr: data.sequentialNumbr,
-      uploadPdfField: data.uploadPdfField,
-      uploads: data.uploads || [],
-      convertionRate: data.convertionRate || 1,
-    });
-
-    // Invoice infos with currency conversion
-    if (data?.invoices) {
-      const processedInvoices = data.invoices.map(invoice => {
-        // Vérifications de sécurité ajoutées
-        const invoiceCurrencyId = invoice?.expenseInvoice?.currency?.id;
-        const paymentCurrencyId = data?.currencyId;
-        
-        // Si currencyId est manquant, on utilise celui de la facture comme fallback
-        const effectiveCurrencyId = paymentCurrencyId || invoiceCurrencyId;
-        
-        // Vérification que nous avons au moins une currency valide
-        if (!invoiceCurrencyId && !paymentCurrencyId) {
-          throw new Error("Missing currency information for invoice payment");
-        }
     
-        const isSameCurrency = invoiceCurrencyId === paymentCurrencyId;
-        const exchangeRate = invoice?.exchangeRate || data?.convertionRate || 1;
-        
-        // Valeurs par défaut sécurisées
-        const amount = invoice?.amount || 0;
-        const originalAmount = invoice?.originalAmount || amount;
-        
-        return {
-          ...invoice,
-          amount: isSameCurrency 
-            ? amount 
-            : originalAmount * exchangeRate,
-          originalAmount,
-          exchangeRate: isSameCurrency ? 1 : exchangeRate,
-          originalCurrencyId: isSameCurrency ? invoiceCurrencyId : effectiveCurrencyId
-        };
+    
+    const setPaymentData = (data: Partial<ExpensePayment>) => {
+      if (!data) return;
+    
+      // Payment infos
+      paymentManager.setPayment({
+        ...data,
+        firm: firms?.find((firm) => firm.id === data.firmId),
+        sequentialNumbr: data.sequentialNumbr,
+        uploadPdfField: data.uploadPdfField,
+        uploads: data.uploads || [],
+        convertionRate: data.convertionRate || 1,
       });
     
-      invoiceManager.setInvoices(
-        processedInvoices,
-        data.currency, 
-        data.convertionRate || 1,
-        'EDIT'
-      );
-    }
-  };
+      // Invoice infos with currency conversion
+      if (data?.invoices) {
+        const processedInvoices = data.invoices.map(invoice => {
+          const invoiceCurrencyId = invoice?.expenseInvoice?.currency?.id;
+          const paymentCurrencyId = data?.currencyId;
+          const isSameCurrency = invoiceCurrencyId === paymentCurrencyId;
+          const exchangeRate = invoice?.exchangeRate || data?.convertionRate || 1;
+          
+          return {
+            ...invoice,
+            amount: isSameCurrency 
+              ? invoice?.amount || 0
+              : (invoice?.originalAmount || invoice?.amount || 0) * exchangeRate,
+            originalAmount: invoice?.originalAmount || invoice?.amount || 0,
+            exchangeRate: isSameCurrency ? 1 : exchangeRate,
+            originalCurrencyId: invoiceCurrencyId
+          };
+        });
+      
+        invoiceManager.setInvoices(
+          processedInvoices,
+          data.currency, 
+          data.convertionRate || 1,
+          isInspectMode ? 'INSPECT' : 'EDIT'
+        );
+      }
+    };
+    
 
-  const { isDisabled, globalReset } = useInitializedState({
-    data: payment || ({} as Partial<ExpensePayment>),
-    getCurrentData: () => {
-      return {
-        payment: paymentManager.getPayment(),
-        invoices: invoiceManager.getInvoices(),
-      };
-    },
-    setFormData: (data: Partial<ExpensePayment>) => {
-      setPaymentData(data);
-    },
-    resetData: () => {
-      paymentManager.reset();
-      invoiceManager.reset();
-    },
-    loading: fetching,
-  });
+    const { isDisabled, globalReset } = useInitializedState({
+      data: payment || ({} as Partial<ExpensePayment>),
+      getCurrentData: () => {
+        return {
+          payment: paymentManager.getPayment(),
+          invoices: invoiceManager.getInvoices(),
+        };
+      },
+      setFormData: (data: Partial<ExpensePayment>) => {
+        setPaymentData(data);
+      },
+      resetData: () => {
+        if (!isInspectMode) {
+          paymentManager.reset();
+          invoiceManager.reset();
+        }
+      },
+      loading: fetching,
+    });
+    
+    // Ajoutez un useEffect pour forcer le rechargement des factures lorsque le payment change
+    React.useEffect(() => {
+      if (payment && payment.firmId && firms) {
+        // Charge les factures automatiquement quand le payment ou les firms changent
+        setPaymentData(payment);
+      }
+    }, [payment, firms]);
 
   const currency = React.useMemo(() => {
     return currencies?.find((c) => c.id === paymentManager.currencyId);
@@ -172,6 +174,8 @@ export const ExpensePaymentUpdateForm = ({ className, paymentId }: ExpensePaymen
   });
 
   const onSubmit = () => {
+    if (isInspectMode) return; // Empêche la soumission en mode inspection
+
     const invoices = invoiceManager
       .getInvoices()
       .map((invoice: ExpensePaymentInvoiceEntry) => {
@@ -180,7 +184,6 @@ export const ExpensePaymentUpdateForm = ({ className, paymentId }: ExpensePaymen
         const shouldConvert = invoiceCurrencyId && paymentCurrencyId && 
                             invoiceCurrencyId !== paymentCurrencyId;
         
-        // Récupérer le taux de change dynamique
         const exchangeRate = invoice.exchangeRate || paymentManager.convertionRate;
         
         if (shouldConvert && (!exchangeRate || exchangeRate <= 0)) {
@@ -192,13 +195,12 @@ export const ExpensePaymentUpdateForm = ({ className, paymentId }: ExpensePaymen
           amount: shouldConvert 
             ? (invoice.amount || 0) * exchangeRate
             : (invoice.amount || 0),
-          exchangeRate, // Taux dynamique
+          exchangeRate,
           originalAmount: invoice.amount || 0,
           originalCurrencyId: paymentCurrencyId
         };
       });
 
-    // Calculate used amount with conversion
     const used = invoiceManager.getInvoices().reduce((sum, invoice) => {
       const invoiceCurrencyId = invoice?.expenseInvoice?.currency?.id;
       const paymentCurrencyId = paymentManager.currencyId;
@@ -232,7 +234,7 @@ export const ExpensePaymentUpdateForm = ({ className, paymentId }: ExpensePaymen
       currencyId: paymentManager.currencyId,
       firmId: paymentManager.firmId,
       sequentialNumbr: paymentManager.sequentialNumbr,
-      invoices: invoices.filter(inv => inv.expenseInvoiceId), // Filter out invalid entries
+      invoices: invoices.filter(inv => inv.expenseInvoiceId),
       uploads: paymentManager.uploadedFiles?.filter((u) => !!u.upload)?.map((u) => u.upload) || [],
     };
 
@@ -247,10 +249,11 @@ export const ExpensePaymentUpdateForm = ({ className, paymentId }: ExpensePaymen
     }
   };
 
+  // Dans ExpensePaymentUpdateForm
   return (
     <div className={cn('overflow-auto px-10 py-6', className)}>
-      {/* Main Container */}
-      <div className={cn('block xl:flex gap-4', false ? 'pointer-events-none' : '')}>
+      {/* Retirez pointer-events-none du conteneur principal */}
+      <div className={cn('block xl:flex gap-4')}>
         {/* First Card */}
         <div className="w-full h-auto flex flex-col xl:w-9/12">
           <ScrollArea className="max-h-[calc(100vh-120px)] border rounded-lg">
@@ -263,27 +266,30 @@ export const ExpensePaymentUpdateForm = ({ className, paymentId }: ExpensePaymen
                     (c) => c.id === cabinet?.currency?.id || c.id === paymentManager?.firm?.currencyId
                   ) || []}
                   loading={fetching}
-                />
-                {paymentManager.firmId && (
-                  <ExpensePaymentInvoiceManagement className="pb-5 border-b" loading={fetching} />
-                )}
-                {/* Extra Options (files) */}
-                <div>
-                  <ExpensePaymentExtraOptions
-                    onUploadAdditionalFiles={(files) => paymentManager.set('uploadedFiles', files)}
-                    onUploadPdfFile={(file) => paymentManager.set('pdfFile', file)}
+                  disabled={isInspectMode}
                   />
-                </div>
+                {paymentManager.firmId && (
+                  <ExpensePaymentInvoiceManagement 
+                  className="pb-5 border-b" 
+                  loading={fetching}
+                  disabled={isInspectMode || isDisabled}
+                  mode={isInspectMode ? 'INSPECT' : 'EDIT'}
+                />
+                )}
                 <div className="flex gap-10 mt-5">
                   <Textarea
                     placeholder={tInvoicing('payment.attributes.notes')}
                     className="resize-none w-2/3"
                     rows={7}
                     value={paymentManager.notes || ''}
-                    onChange={(e) => paymentManager.set('notes', e.target.value)}
+                    onChange={(e) => !isInspectMode && paymentManager.set('notes', e.target.value)}
+                    disabled={isInspectMode} // Uniquement isInspectMode
                   />
                   <div className="w-1/3 my-auto">
-                    <ExpensePaymentFinancialInformation currency={currency} />
+                    <ExpensePaymentFinancialInformation 
+                      currency={currency} 
+                      disabled={isInspectMode} // Uniquement isInspectMode
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -299,6 +305,7 @@ export const ExpensePaymentUpdateForm = ({ className, paymentId }: ExpensePaymen
                   handleSubmit={onSubmit}
                   reset={globalReset}
                   loading={isUpdatePending}
+                  isInspectMode={isInspectMode}
                 />
               </CardContent>
             </Card>

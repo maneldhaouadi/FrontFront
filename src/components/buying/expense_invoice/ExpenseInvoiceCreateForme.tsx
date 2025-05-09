@@ -201,33 +201,21 @@ export const ExpenseInvoiceCreateForm = ({ className, firmId }: ExpenseInvoiceFo
   const onSubmit = async (status: EXPENSE_INVOICE_STATUS) => {
     // Convertir les articles en DTO
     const articlesDto: ExpenseArticleInvoiceEntry[] = articleManager.getArticles()?.map((article) => {
-      // Valeurs par défaut pour l'article
-      const defaultArticle = {
-        id: 0,
-        title: '',
-        description: '',
-        category: '',
-        subCategory: '',
-        purchasePrice: 0,
-        salePrice: 0,
-        quantityInStock: 0
-      };
-    
-      // Article complet avec valeurs par défaut et valeurs existantes
-      const fullArticle = article?.article ? {
-        ...defaultArticle,
-        ...article.article,
-        // Surcharge des valeurs spécifiques
-        id: article.article.id ?? 0,
-        title: article.article.title || '',
-        description: !controlManager.isArticleDescriptionHidden 
-          ? article.article.description || '' 
-          : ''
-      } : defaultArticle;
-    
-      return {
+      // Créez l'objet article avec les propriétés requises
+      const mappedArticle = {
         id: article?.id,
-        article: fullArticle,
+        article: {
+          id: article?.article?.id ?? 0,
+          title: article?.article?.title || '',
+          description: article?.article?.description || '',
+          reference: article?.article?.reference || '', // Ajout de la référence obligatoire
+          quantityInStock: article?.article?.quantityInStock || 0,
+          status: article?.article?.status || 'draft', // Valeur par défaut
+          unitPrice: article?.article?.unitPrice || 0,// Ajout du prix unitaire,
+          version:article?.article?.version || 0
+           
+
+        },
         quantity: article?.quantity || 0,
         unit_price: article?.unit_price || 0,
         discount: article?.discount || 0,
@@ -235,9 +223,10 @@ export const ExpenseInvoiceCreateForm = ({ className, firmId }: ExpenseInvoiceFo
           ? DISCOUNT_TYPE.PERCENTAGE 
           : DISCOUNT_TYPE.AMOUNT,
         taxes: article?.expenseArticleInvoiceEntryTaxes?.map((entry) => entry?.tax?.id).filter(Boolean) as number[],
-        // Ajout des autres propriétés obligatoires de ExpenseArticleInvoiceEntry si nécessaire
         expenseArticleInvoiceEntryTaxes: article?.expenseArticleInvoiceEntryTaxes || []
       };
+    
+      return mappedArticle;
     }) || []; // Gestion du cas où getArticles() retourne undefined
   
     // Gestion des fichiers uploadés

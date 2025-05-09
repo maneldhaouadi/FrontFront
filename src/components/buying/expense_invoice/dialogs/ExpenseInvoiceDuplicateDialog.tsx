@@ -48,7 +48,7 @@ export const ExpenseInvoiceDuplicateDialog: React.FC<ExpenseInvoiceDuplicateDial
         checked={includeFiles}
         onCheckedChange={() => setIncludeFiles(!includeFiles)}
       />{' '}
-      <Label>{tInvoicing('expense_invoice.file_duplication')}</Label>
+      <Label>Voulez-vous également dupliquer les fichiers ?</Label>
     </div>
   );
 

@@ -7,17 +7,21 @@ import { ciel } from '@/utils/number.utils';
 import { useExpensePaymentManager } from '../hooks/useExpensePaymentManager';
 import { useExpensePaymentInvoiceManager } from '../hooks/useExpensePaymentInvoiceManager';
 import { Input } from '@/components/ui/input';
+import { UneditableInput } from '@/components/ui/uneditable/uneditable-input';
 
 interface ExpensePaymentFinancialInformationProps {
   className?: string;
   currency?: Currency;
   loading?: boolean;
+  disabled?: boolean; // Ajout de la prop disabled
+
 }
 
 export const ExpensePaymentFinancialInformation = ({
   className,
   currency,
-  loading
+  loading,
+  disabled = false, // Valeur par défaut
 }: ExpensePaymentFinancialInformationProps) => {
   const { t: tInvoicing } = useTranslation('invoicing');
   const paymentManager = useExpensePaymentManager();
@@ -47,6 +51,7 @@ export const ExpensePaymentFinancialInformation = ({
   const remaining_amount = ciel(available - used, currencyDigitAfterComma + 1);
 
   const handleFeeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return;
     const value = parseFloat(e.target.value) || 0;
     paymentManager.set('fee', value);
   };
@@ -64,16 +69,23 @@ export const ExpensePaymentFinancialInformation = ({
       {/* Frais (modifiable) */}
       <div className="grid grid-cols-2 items-center gap-4">
         <Label>{tInvoicing('payment.attributes.fee')}</Label>
-        <Input
-          type="number"
-          value={fee}
-          onChange={handleFeeChange}
-          min="0"
-          step="0.01"
-          disabled={loading}
-        />
+        {disabled ? (
+          <UneditableInput 
+            value={fee.toFixed(currencyDigitAfterComma)}
+            className="text-right"
+          />
+        ) : (
+          <Input
+            type="number"
+            value={fee}
+            onChange={handleFeeChange}
+            min="0"
+            step="0.01"
+            disabled={loading || disabled}
+            className="text-right"
+          />
+        )}
       </div>
-
       {/* Total à payer */}
       <div className="grid grid-cols-2 items-center gap-4 pt-2 border-t">
         <Label className="font-semibold">{tInvoicing('total')}</Label>

@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { TemplateType } from "@/types/template"
+import { templateApi } from "@/api"
+import { toast } from "sonner"
 
 interface CreateTemplateDialogProps {
   open: boolean
@@ -24,18 +26,43 @@ export function CreateTemplateDialog({ open, type, onOpenChange }: CreateTemplat
   const router = useRouter()
   const [name, setName] = useState("")
   const [isCreating, setIsCreating] = useState(false)
+  const [error, setError] = useState("")
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!name.trim()) return
     
     setIsCreating(true)
-    // Redirige vers la page d'édition avec le nom pré-rempli
-    router.push(`/settings/pdf/new-template?type=${type}&name=${encodeURIComponent(name)}`)
-    onOpenChange(false)
+    setError("")
+
+    try {
+      // Vérifier si le nom existe déjà
+      const templates = await templateApi.getAll()
+      const nameExists = templates.some(template => 
+        template.name.toLowerCase() === name.trim().toLowerCase()
+      )
+
+      if (nameExists) {
+        setError("Un modèle avec ce nom existe déjà")
+        return
+      }
+
+      // Redirige vers la page d'édition avec le nom pré-rempli
+      router.push(`/settings/pdf/new-template?type=${type}&name=${encodeURIComponent(name)}`)
+      onOpenChange(false)
+    } catch (err) {
+    } finally {
+      setIsCreating(false)
+    }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(open) => {
+      onOpenChange(open)
+      if (!open) {
+        setName("")
+        setError("")
+      }
+    }}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Créer un nouveau modèle</DialogTitle>
@@ -45,14 +72,22 @@ export function CreateTemplateDialog({ open, type, onOpenChange }: CreateTemplat
             <Label htmlFor="name" className="text-right">
               Nom
             </Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Nom du modèle"
-              className="col-span-3"
-              autoFocus
-            />
+            <div className="col-span-3 space-y-1">
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value)
+                  setError("")
+                }}
+                placeholder="Nom du modèle"
+                className={error ? "border-destructive" : ""}
+                autoFocus
+              />
+              {error && (
+                <p className="text-sm text-destructive">{error}</p>
+              )}
+            </div>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label className="text-right">
@@ -67,7 +102,7 @@ export function CreateTemplateDialog({ open, type, onOpenChange }: CreateTemplat
           <Button 
             type="submit"
             onClick={handleCreate}
-            disabled={!name.trim() || isCreating}
+            disabled={!name.trim() || isCreating || !!error}
           >
             {isCreating ? "Création..." : "Créer"}
           </Button>

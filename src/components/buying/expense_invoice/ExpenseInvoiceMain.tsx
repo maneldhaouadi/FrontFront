@@ -17,6 +17,7 @@ import { ExpenseDuplicateInvoiceDto } from '@/types/expense_invoices';
 import { EXPENSE_INVOICE_STATUS } from '@/types/expense_invoices';
 import { DuplicateInvoiceDto } from '@/types';
 import { toast } from 'sonner';
+import { ExpenseInvoiceDownloadDialog } from './dialogs/ExpenseInvoiceDownloadDialog';
 
 interface ExpenseInvoiceMainProps {
   className?: string;
@@ -27,6 +28,7 @@ export const ExpenseInvoiceMain: React.FC<ExpenseInvoiceMainProps> = ({ classNam
   const { t: tCommon } = useTranslation('common');
   const { t: tInvoicing } = useTranslation('invoicing');
   const { setRoutes } = useBreadcrumb();
+  const [isDownloadPending, setIsDownloadPending] = React.useState(false);
 
   React.useEffect(() => {
     setRoutes([
@@ -161,6 +163,18 @@ export const ExpenseInvoiceMain: React.FC<ExpenseInvoiceMainProps> = ({ classNam
     setDeleteDialog(true);
   };
 
+  const handleDownload = async (templateId?: number) => {
+    setIsDownloadPending(true);
+    try {
+      await api.expense_invoice.exportInvoicePdf(invoiceManager.id, templateId);
+    } catch (error) {
+      toast.error('Erreur lors du téléchargement');
+    } finally {
+      setIsDownloadPending(false);
+    }
+  };
+
+
   //Duplicate Invoice
   const { mutate: duplicateInvoice, isPending: isDuplicationPending } = useMutation({
     mutationFn: ({ id, includeFiles }: { id: number; includeFiles: boolean }) => {
@@ -216,6 +230,14 @@ export const ExpenseInvoiceMain: React.FC<ExpenseInvoiceMainProps> = ({ classNam
         }}
         isDuplicationPending={isDuplicationPending}
         onClose={() => setDuplicateDialog(false)}
+      />
+       
+       <ExpenseInvoiceDownloadDialog
+        id={invoiceManager?.id || 0}
+        open={downloadDialog}
+        onDownload={handleDownload}
+        isDownloadPending={isDownloadPending}
+        onClose={() => setDownloadDialog(false)}
       />
 
       <ExpenseInvoiceActionsContext.Provider value={context}>

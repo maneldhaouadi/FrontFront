@@ -72,7 +72,7 @@ export default function EditTemplatePage() {
 
   return (
     <TemplateEditorPage
-      type={template.type}
+      type={template.type as TemplateType}
       templateId={template.id}
       initialContent={template.content}
       initialName={template.name}

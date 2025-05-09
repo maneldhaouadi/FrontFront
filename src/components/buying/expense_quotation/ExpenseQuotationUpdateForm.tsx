@@ -197,8 +197,6 @@ export const ExpenseQuotationUpdateForm = ({ className, expensequotationId }: Ex
     },
     onSuccess: (data) => {
       if (data.status === EXPENSQUOTATION_STATUS.Draft) {
-        toast.success('Devis facturé avec succès');
-      } else {
         toast.success('Devis modifié avec succès');
       }
       refetchQuotation();
@@ -216,8 +214,13 @@ export const ExpenseQuotationUpdateForm = ({ className, expensequotationId }: Ex
       const articlesDto: ExpenseArticleQuotationEntry[] = articleManager.getArticles()?.map((article) => ({
         article: {
           id: article?.article?.id ?? 0,
-          title: article?.article?.title,
-          description: controlManager.isArticleDescriptionHidden ? '' : article?.article?.description,
+          title: article?.article?.title || '',
+          description: article?.article?.description || '',
+          reference: article?.article?.reference || '', // Ajout de la référence obligatoire
+          quantityInStock: article?.article?.quantityInStock || 0,
+          status: article?.article?.status || 'draft', // Valeur par défaut
+          unitPrice: article?.article?.unitPrice || 0,// Ajout du prix unitaire,
+          version:article?.article?.version || 0
         },
         quantity: article?.quantity || 0,
         unit_price: article?.unit_price || 0,

@@ -234,133 +234,733 @@ export function TemplateFieldsPanel({
   const getTypeSpecificFields = (): Partial<Record<SectionKey, Section>> => {
     switch (type) {
       case TemplateType.INVOICE: 
-        return {
-          articles: {
-            title: 'Lignes de facture',
-            fields: [
-              { 
-                name: 'Ligne complète', 
-                path: 'articleExpenseEntries[]', 
-                template: '{{article.title}} | {{quantity}} x {{unit_price}} {{currency.symbol}} = {{total}} {{currency.symbol}}'
-              },
-              { name: 'Référence', path: 'articleExpenseEntries[].article.reference' },
-              { name: 'Désignation', path: 'articleExpenseEntries[].article.title' },
-              { name: 'Description', path: 'articleExpenseEntries[].article.description' },
-              { name: 'Quantité', path: 'articleExpenseEntries[].quantity' },
-              { name: 'Prix unitaire', path: 'articleExpenseEntries[].unit_price' },
-              { name: 'Unité', path: 'articleExpenseEntries[].unit' },
-              { name: 'Remise', path: 'articleExpenseEntries[].discount' },
-              { name: 'Type remise', path: 'articleExpenseEntries[].discount_type' },
-              { name: 'Sous-total', path: 'articleExpenseEntries[].subTotal' }
-            ]
-          },
-          taxes: {
-            title: 'Taxes',
-            fields: [
-              { 
-                name: 'Ligne taxe', 
-                path: 'articleExpenseEntries[].expenseArticleInvoiceEntryTaxes[]',
-                template: '{{tax.label}} ({{tax.rate}}%) = {{amount}} {{currency.symbol}}'
-              },
-              { name: 'Timbre fiscal', path: 'taxStamp' },
-              { 
-                name: 'Ligne FODEC', 
-                path: 'fodec',
-                template: 'FODEC ({{fodec.rate}}%) = {{fodec.amount}} {{currency.symbol}}'
-              }
-            ]
-          },
-          totals: {
-            title: 'Totaux',
-            fields: [
-              { name: 'Sous-total HT', path: 'subTotal' },
-              { name: 'Remise globale', path: 'discount' },
-              { name: 'Total HT', path: 'totalHT' },
-              { name: 'Total TVA', path: 'totalTVA' },
-              { name: 'Total FODEC', path: 'totalFODEC' },
-              { name: 'Total TTC', path: 'total' },
-              { name: 'Montant payé', path: 'amountPaid' },
-              { name: 'Reste à payer', path: 'remainingAmount' },
-              { name: 'Devise', path: 'currency.symbol' }
-            ]
-          }
+  return {
+    articles: {
+      title: 'Lignes de facture',
+      fields: [
+        { 
+          name: 'Liste complète des articles',
+          path: 'articleExpenseEntries',
+          template: `<% if (invoice.articleExpenseEntries?.length) { %>
+            <table class="article-table">
+              <thead>
+                <tr>
+                  <th>Article</th>
+                  <th>Description</th>
+                  <th>Référence</th>
+                  <th>Quantité</th>
+                  <th>Prix unitaire</th>
+                  <th>Remise</th>
+                  <th>Sous-total</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% invoice.articleExpenseEntries.forEach(function(entry, index) { %>
+                  <tr>
+                    <td><%= entry.article?.title || 'Sans titre' %></td>
+                    <td><%= entry.article?.description || '-' %></td>
+                    <td><%= entry.article?.reference || '-' %></td>
+                    <td><%= entry.quantity || '0' %> <%= entry.unit || 'unité' %></td>
+                    <td><%= entry.unit_price || '0' %> <%= invoice.currency?.symbol || '' %></td>
+                    <td>
+                      <% if (entry.discount > 0) { %>
+                        <%= entry.discount %><%= entry.discount_type === 'PERCENT' ? '%' : ' ' + (invoice.currency?.symbol || '') %>
+                      <% } else { %>
+                        -
+                      <% } %>
+                    </td>
+                    <td><%= entry.subTotal || '0' %> <%= invoice.currency?.symbol || '' %></td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          <% } else { %>
+            <p class="no-articles">Aucun article dans cette facture</p>
+          <% } %>`
+        },
+        { 
+          name: 'Tous les titres d\'articles',
+          path: 'articleExpenseEntries[].article.title',
+          template: `<% if (invoice.articleExpenseEntries?.length) { %>
+            <div class="article-titles">
+              <% invoice.articleExpenseEntries.forEach(function(entry, index) { %>
+                <div class="title-item">
+                  <strong>Article <%= index + 1 %>:</strong>
+                  <p><%= entry.article?.title || 'Sans titre' %></p>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
+        },
+        { 
+          name: 'Toutes les descriptions',
+          path: 'articleExpenseEntries[].article.description',
+          template: `<% if (invoice.articleExpenseEntries?.length) { %>
+            <div class="article-descriptions">
+              <% invoice.articleExpenseEntries.forEach(function(entry, index) { %>
+                <div class="description-item">
+                  <strong>Article <%= index + 1 %>:</strong>
+                  <p><%= entry.article?.description || 'Pas de description' %></p>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
+        },
+        { 
+          name: 'Toutes les références',
+          path: 'articleExpenseEntries[].article.reference',
+          template: `<% if (invoice.articleExpenseEntries?.length) { %>
+            <div class="article-references">
+              <% invoice.articleExpenseEntries.forEach(function(entry, index) { %>
+                <div class="reference-item">
+                  <strong>Article <%= index + 1 %>:</strong>
+                  <p><%= entry.article?.reference || 'Pas de référence' %></p>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
+        },
+        { 
+          name: 'Toutes les quantités',
+          path: 'articleExpenseEntries[].quantity',
+          template: `<% if (invoice.articleExpenseEntries?.length) { %>
+            <div class="article-quantities">
+              <% invoice.articleExpenseEntries.forEach(function(entry, index) { %>
+                <div class="quantity-item">
+                  <strong>Article <%= index + 1 %>:</strong>
+                  <p><%= entry.quantity || '0' %> <%= entry.unit || 'unité' %></p>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
+        },
+        { 
+          name: 'Tous les prix unitaires',
+          path: 'articleExpenseEntries[].unit_price',
+          template: `<% if (invoice.articleExpenseEntries?.length) { %>
+            <div class="article-unit-prices">
+              <% invoice.articleExpenseEntries.forEach(function(entry, index) { %>
+                <div class="unit-price-item">
+                  <strong>Article <%= index + 1 %>:</strong>
+                  <p><%= entry.unit_price || '0' %> <%= invoice.currency?.symbol || '' %></p>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
+        },
+        { 
+          name: 'Toutes les remises',
+          path: 'articleExpenseEntries[].discount',
+          template: `<% if (invoice.articleExpenseEntries?.length) { %>
+            <div class="article-discounts">
+              <% invoice.articleExpenseEntries.forEach(function(entry, index) { %>
+                <div class="discount-item">
+                  <strong>Article <%= index + 1 %>:</strong>
+                  <p>
+                    <% if (entry.discount > 0) { %>
+                      <%= entry.discount %><%= entry.discount_type === 'PERCENT' ? '%' : ' ' + (invoice.currency?.symbol || '') %>
+                    <% } else { %>
+                      Aucune remise
+                    <% } %>
+                  </p>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
+        },
+        { 
+          name: 'Tous les sous-totaux',
+          path: 'articleExpenseEntries[].subTotal',
+          template: `<% if (invoice.articleExpenseEntries?.length) { %>
+            <div class="article-subtotals">
+              <% invoice.articleExpenseEntries.forEach(function(entry, index) { %>
+                <div class="subtotal-item">
+                  <strong>Article <%= index + 1 %>:</strong>
+                  <p><%= entry.subTotal || '0' %> <%= invoice.currency?.symbol || '' %></p>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
         }
+      ]
+    },
+    taxes: {
+      title: 'Taxes',
+      fields: [
+        { 
+          name: 'Récapitulatif des taxes',
+          path: 'taxSummary',
+          template: `<% if (invoice.taxSummary?.length) { %>
+            <table class="tax-summary">
+              <thead>
+                <tr>
+                  <th>Taxe</th>
+                  <th>Taux</th>
+                  <th>Montant</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% invoice.taxSummary.forEach(function(tax) { %>
+                  <tr>
+                    <td><%= tax.label %></td>
+                    <td><%= tax.rate %>%</td>
+                    <td><%= tax.amount %> <%= invoice.currency?.symbol || '' %></td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          <% } else { %>
+            <p class="no-taxes">Aucune taxe applicable</p>
+          <% } %>`
+        },
+        { 
+          name: 'Détail des taxes par article',
+          path: 'articleExpenseEntries[].expenseArticleInvoiceEntryTaxes',
+          template: `<% if (invoice.articleExpenseEntries?.length) { %>
+            <div class="article-taxes">
+              <% invoice.articleExpenseEntries.forEach(function(entry, index) { %>
+                <div class="taxes-for-article">
+                  <h4>Article <%= index + 1 %>: <%= entry.article?.title || 'Sans titre' %></h4>
+                  <% if (entry.expenseArticleInvoiceEntryTaxes?.length) { %>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Taxe</th>
+                          <th>Taux</th>
+                          <th>Montant</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <% entry.expenseArticleInvoiceEntryTaxes.forEach(function(taxEntry) { %>
+                          <tr>
+                            <td><%= taxEntry.tax?.label || 'Taxe' %></td>
+                            <td><%= taxEntry.tax?.rate %>%</td>
+                            <td><%= taxEntry.amount %> <%= invoice.currency?.symbol || '' %></td>
+                          </tr>
+                        <% }); %>
+                      </tbody>
+                    </table>
+                  <% } else { %>
+                    <p class="no-taxes-for-article">Pas de taxes pour cet article</p>
+                  <% } %>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
+        }
+      ]
+    },
+    totals: {
+      title: 'Totaux',
+      fields: [
+        { 
+          name: 'Sous-total HT',
+          path: 'subTotal',
+          template: `<div class="total-row">
+            <span>Sous-total HT:</span>
+            <span><%= invoice.subTotal || 0 %> <%= invoice.currency?.symbol || '' %></span>
+          </div>`
+        },
+        { 
+          name: 'Remise globale',
+          path: 'discount',
+          template: `<div class="total-row">
+            <span>Remise globale:</span>
+            <span>
+              <%= invoice.discount || 0 %><%= invoice.discount_type === 'PERCENT' ? '%' : ' ' + (invoice.currency?.symbol || '') %>
+            </span>
+          </div>`
+        },
+        { 
+          name: 'Total HT',
+          path: 'totalHT',
+          template: `<div class="total-row">
+            <span>Total HT:</span>
+            <span><%= invoice.totalHT || 0 %> <%= invoice.currency?.symbol || '' %></span>
+          </div>`
+        },
+        { 
+          name: 'Total TVA',
+          path: 'totalTVA',
+          template: `<div class="total-row">
+            <span>Total TVA:</span>
+            <span><%= invoice.totalTVA || 0 %> <%= invoice.currency?.symbol || '' %></span>
+          </div>`
+        },
+        { 
+          name: 'Total FODEC',
+          path: 'totalFODEC',
+          template: `<div class="total-row">
+            <span>Total FODEC:</span>
+            <span><%= invoice.totalFODEC || 0 %> <%= invoice.currency?.symbol || '' %></span>
+          </div>`
+        },
+        { 
+          name: 'Total TTC',
+          path: 'total',
+          template: `<div class="total-row total-ttc">
+            <strong>Total TTC:</strong>
+            <strong><%= invoice.total || 0 %> <%= invoice.currency?.symbol || '' %></strong>
+          </div>`
+        },
+        { 
+          name: 'Montant payé',
+          path: 'amountPaid',
+          template: `<div class="total-row">
+            <span>Montant payé:</span>
+            <span><%= invoice.amountPaid || 0 %> <%= invoice.currency?.symbol || '' %></span>
+          </div>`
+        },
+        { 
+          name: 'Reste à payer',
+          path: 'remainingAmount',
+          template: `<div class="total-row">
+            <span>Reste à payer:</span>
+            <span><%= invoice.remainingAmount || 0 %> <%= invoice.currency?.symbol || '' %></span>
+          </div>`
+        }
+      ]
+    },
+    details: {
+      title: 'Détails',
+      fields: [
+        { 
+          name: 'Conditions générales',
+          path: 'generalConditions',
+          template: `<div class="general-conditions">
+            <h4>Conditions générales</h4>
+            <p><%= invoice.generalConditions || 'Aucune condition générale spécifiée' %></p>
+          </div>`
+        },
+        { 
+          name: 'Validité',
+          path: 'validityPeriod',
+          template: `<div class="validity-period">
+            <p>Validité de la facture: <%= invoice.validityPeriod ? invoice.validityPeriod + ' jours' : 'Non spécifiée' %></p>
+          </div>`
+        },
+        { 
+          name: 'Notes',
+          path: 'notes',
+          template: `<div class="notes">
+            <h4>Notes</h4>
+            <p><%= invoice.notes || 'Aucune note' %></p>
+          </div>`
+        }
+      ]
+    }
+  };
 
-      case TemplateType.QUOTATION:
-        return {
-          articles: {
-            title: 'Lignes de devis',
-            fields: [
-              { 
-                name: 'Ligne complète', 
-                path: 'articleQuotationEntries[]', 
-                template: '{{article.title}} | {{quantity}} x {{unit_price}} {{currency.symbol}} = {{total}} {{currency.symbol}}'
-              },
-              { name: 'Référence', path: 'articleQuotationEntries[].article.reference' },
-              { name: 'Désignation', path: 'articleQuotationEntries[].article.title' },
-              { name: 'Description', path: 'articleQuotationEntries[].article.description' },
-              { name: 'Quantité', path: 'articleQuotationEntries[].quantity' },
-              { name: 'Prix unitaire', path: 'articleQuotationEntries[].unit_price' },
-              { name: 'Unité', path: 'articleQuotationEntries[].unit' },
-              { name: 'Remise', path: 'articleQuotationEntries[].discount' },
-              { name: 'Type remise', path: 'articleQuotationEntries[].discount_type' },
-              { name: 'Sous-total', path: 'articleQuotationEntries[].subTotal' }
-            ]
-          },
-          taxes: {
-            title: 'Taxes',
-            fields: [
-              { 
-                name: 'Ligne taxe', 
-                path: 'articleQuotationEntries[].articleQuotationEntryTaxes[]',
-                template: '{{tax.label}} ({{tax.rate}}%) = {{amount}} {{currency.symbol}}'
-              }
-            ]
-          },
-          totals: {
-            title: 'Totaux',
-            fields: [
-              { name: 'Sous-total HT', path: 'subTotal' },
-              { name: 'Remise globale', path: 'discount' },
-              { name: 'Total HT', path: 'totalHT' },
-              { name: 'Total TVA', path: 'totalVAT' },
-              { name: 'Total FODEC', path: 'fodec.amount' },
-              { name: 'Total TTC', path: 'total' },
-              { name: 'Devise', path: 'currency.symbol' }
-            ]
-          },
-          details: {
-            title: 'Détails',
-            fields: [
-              { name: 'Conditions générales', path: 'generalConditions' },
-              { name: 'Validité', path: 'validityPeriod' },
-              { name: 'Notes', path: 'notes' }
-            ]
-          }
+        case TemplateType.QUOTATION:
+  return {
+    articles: {
+      title: 'Lignes de devis',
+      fields: [
+        { 
+          name: 'Liste complète des articles',
+          path: 'expensearticleQuotationEntries',
+          template: `<% if (quotation.expensearticleQuotationEntries?.length) { %>
+            <table class="article-table">
+              <thead>
+                <tr>
+                  <th>Article</th>
+                  <th>Description</th>
+                  <th>Référence</th>
+                  <th>Quantité</th>
+                  <th>Prix unitaire</th>
+                  <th>Remise</th>
+                  <th>Sous-total</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% quotation.expensearticleQuotationEntries.forEach(function(entry, index) { %>
+                  <tr>
+                    <td><%= entry.article?.title || 'Sans titre' %></td>
+                    <td><%= entry.article?.description || '-' %></td>
+                    <td><%= entry.article?.reference || '-' %></td>
+                    <td><%= entry.quantity || '0' %> <%= entry.unit || 'unité' %></td>
+                    <td><%= entry.unit_price || '0' %> <%= quotation.currency?.symbol || '' %></td>
+                    <td>
+                      <% if (entry.discount > 0) { %>
+                        <%= entry.discount %><%= entry.discount_type === 'PERCENT' ? '%' : ' ' + (quotation.currency?.symbol || '') %>
+                      <% } else { %>
+                        -
+                      <% } %>
+                    </td>
+                    <td><%= entry.subTotal || '0' %> <%= quotation.currency?.symbol || '' %></td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          <% } else { %>
+            <p class="no-articles">Aucun article dans ce devis</p>
+          <% } %>`
+        },
+        { 
+          name: 'Tous les titres d\'articles',
+          path: 'expensearticleQuotationEntries[].article.title',
+          template: `<% if (quotation.expensearticleQuotationEntries?.length) { %>
+            <div class="article-titles">
+              <% quotation.expensearticleQuotationEntries.forEach(function(entry, index) { %>
+                <div class="title-item">
+                  <strong>Article <%= index + 1 %>:</strong>
+                  <p><%= entry.article?.title || 'Sans titre' %></p>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
+        },
+        { 
+          name: 'Toutes les descriptions',
+          path: 'expensearticleQuotationEntries[].article.description',
+          template: `<% if (quotation.expensearticleQuotationEntries?.length) { %>
+            <div class="article-descriptions">
+              <% quotation.expensearticleQuotationEntries.forEach(function(entry, index) { %>
+                <div class="description-item">
+                  <strong>Article <%= index + 1 %>:</strong>
+                  <p><%= entry.article?.description || 'Pas de description' %></p>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
+        },
+        { 
+          name: 'Toutes les références',
+          path: 'expensearticleQuotationEntries[].article.reference',
+          template: `<% if (quotation.expensearticleQuotationEntries?.length) { %>
+            <div class="article-references">
+              <% quotation.expensearticleQuotationEntries.forEach(function(entry, index) { %>
+                <div class="reference-item">
+                  <strong>Article <%= index + 1 %>:</strong>
+                  <p><%= entry.article?.reference || 'Pas de référence' %></p>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
+        },
+        { 
+          name: 'Toutes les quantités',
+          path: 'expensearticleQuotationEntries[].quantity',
+          template: `<% if (quotation.expensearticleQuotationEntries?.length) { %>
+            <div class="article-quantities">
+              <% quotation.expensearticleQuotationEntries.forEach(function(entry, index) { %>
+                <div class="quantity-item">
+                  <strong>Article <%= index + 1 %>:</strong>
+                  <p><%= entry.quantity || '0' %> <%= entry.unit || 'unité' %></p>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
+        },
+        { 
+          name: 'Tous les prix unitaires',
+          path: 'expensearticleQuotationEntries[].unit_price',
+          template: `<% if (quotation.expensearticleQuotationEntries?.length) { %>
+            <div class="article-unit-prices">
+              <% quotation.expensearticleQuotationEntries.forEach(function(entry, index) { %>
+                <div class="unit-price-item">
+                  <strong>Article <%= index + 1 %>:</strong>
+                  <p><%= entry.unit_price || '0' %> <%= quotation.currency?.symbol || '' %></p>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
+        },
+        { 
+          name: 'Toutes les remises',
+          path: 'expensearticleQuotationEntries[].discount',
+          template: `<% if (quotation.expensearticleQuotationEntries?.length) { %>
+            <div class="article-discounts">
+              <% quotation.expensearticleQuotationEntries.forEach(function(entry, index) { %>
+                <div class="discount-item">
+                  <strong>Article <%= index + 1 %>:</strong>
+                  <p>
+                    <% if (entry.discount > 0) { %>
+                      <%= entry.discount %><%= entry.discount_type === 'PERCENT' ? '%' : ' ' + (quotation.currency?.symbol || '') %>
+                    <% } else { %>
+                      Aucune remise
+                    <% } %>
+                  </p>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
+        },
+        { 
+          name: 'Tous les sous-totaux',
+          path: 'expensearticleQuotationEntries[].subTotal',
+          template: `<% if (quotation.expensearticleQuotationEntries?.length) { %>
+            <div class="article-subtotals">
+              <% quotation.expensearticleQuotationEntries.forEach(function(entry, index) { %>
+                <div class="subtotal-item">
+                  <strong>Article <%= index + 1 %>:</strong>
+                  <p><%= entry.subTotal || '0' %> <%= quotation.currency?.symbol || '' %></p>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
         }
-      
-      case TemplateType.PAYMENT:
-        return {
-          details: {
-            title: 'Détails paiement',
-            fields: [
-              { name: 'Méthode de paiement', path: 'paymentMethod' },
-              { name: 'Référence', path: 'reference' },
-              { name: 'Date paiement', path: 'paymentDate' },
-              { name: 'Facture associée', path: 'linkedInvoice.number' },
-              { name: 'Statut', path: 'status' }
-            ]
-          },
-          totals: {
-            title: 'Montants',
-            fields: [
-              { name: 'Montant', path: 'amount' },
-              { name: 'Frais', path: 'fees' },
-              { name: 'Total', path: 'total' },
-              { name: 'Devise', path: 'currency.symbol' }
-            ]
-          }
+      ]
+    },
+    taxes: {
+      title: 'Taxes',
+      fields: [
+        { 
+          name: 'Récapitulatif des taxes',
+          path: 'taxSummary',
+          template: `<% if (quotation.taxSummary?.length) { %>
+            <table class="tax-summary">
+              <thead>
+                <tr>
+                  <th>Taxe</th>
+                  <th>Taux</th>
+                  <th>Montant</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% quotation.taxSummary.forEach(function(tax) { %>
+                  <tr>
+                    <td><%= tax.label %></td>
+                    <td><%= tax.rate %>%</td>
+                    <td><%= tax.amount %> <%= quotation.currency?.symbol || '' %></td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          <% } else { %>
+            <p class="no-taxes">Aucune taxe applicable</p>
+          <% } %>`
+        },
+        { 
+          name: 'Détail des taxes par article',
+          path: 'expensearticleQuotationEntries[].articleQuotationEntryTaxes',
+          template: `<% if (quotation.expensearticleQuotationEntries?.length) { %>
+            <div class="article-taxes">
+              <% quotation.expensearticleQuotationEntries.forEach(function(entry, index) { %>
+                <div class="taxes-for-article">
+                  <h4>Article <%= index + 1 %>: <%= entry.article?.title || 'Sans titre' %></h4>
+                  <% if (entry.articleQuotationEntryTaxes?.length) { %>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Taxe</th>
+                          <th>Taux</th>
+                          <th>Montant</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <% entry.articleQuotationEntryTaxes.forEach(function(taxEntry) { %>
+                          <tr>
+                            <td><%= taxEntry.tax?.label || 'Taxe' %></td>
+                            <td><%= taxEntry.tax?.rate %>%</td>
+                            <td><%= taxEntry.amount %> <%= quotation.currency?.symbol || '' %></td>
+                          </tr>
+                        <% }); %>
+                      </tbody>
+                    </table>
+                  <% } else { %>
+                    <p class="no-taxes-for-article">Pas de taxes pour cet article</p>
+                  <% } %>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>`
         }
+      ]
+    },
+    totals: {
+      title: 'Totaux',
+      fields: [
+        { 
+          name: 'Sous-total HT',
+          path: 'subTotal',
+          template: `<div class="total-row">
+            <span>Sous-total HT:</span>
+            <span><%= quotation.subTotal || 0 %> <%= quotation.currency?.symbol || '' %></span>
+          </div>`
+        },
+        { 
+          name: 'Remise globale',
+          path: 'discount',
+          template: `<div class="total-row">
+            <span>Remise globale:</span>
+            <span>
+              <%= quotation.discount || 0 %><%= quotation.discount_type === 'PERCENT' ? '%' : ' ' + (quotation.currency?.symbol || '') %>
+            </span>
+          </div>`
+        },
+        { 
+          name: 'Total HT',
+          path: 'totalHT',
+          template: `<div class="total-row">
+            <span>Total HT:</span>
+            <span><%= quotation.totalHT || 0 %> <%= quotation.currency?.symbol || '' %></span>
+          </div>`
+        },
+        { 
+          name: 'Total TVA',
+          path: 'totalVAT',
+          template: `<div class="total-row">
+            <span>Total TVA:</span>
+            <span><%= quotation.totalVAT || 0 %> <%= quotation.currency?.symbol || '' %></span>
+          </div>`
+        },
+        { 
+          name: 'Total FODEC',
+          path: 'fodec.amount',
+          template: `<div class="total-row">
+            <span>Total FODEC:</span>
+            <span><%= quotation.fodec?.amount || 0 %> <%= quotation.currency?.symbol || '' %></span>
+          </div>`
+        },
+        { 
+          name: 'Total TTC',
+          path: 'total',
+          template: `<div class="total-row total-ttc">
+            <strong>Total TTC:</strong>
+            <strong><%= quotation.total || 0 %> <%= quotation.currency?.symbol || '' %></strong>
+          </div>`
+        }
+      ]
+    },
+    details: {
+      title: 'Détails',
+      fields: [
+        { 
+          name: 'Conditions générales',
+          path: 'generalConditions',
+          template: `<div class="general-conditions">
+            <h4>Conditions générales</h4>
+            <p><%= quotation.generalConditions || 'Aucune condition générale spécifiée' %></p>
+          </div>`
+        },
+        { 
+          name: 'Validité',
+          path: 'validityPeriod',
+          template: `<div class="validity-period">
+            <p>Validité du devis: <%= quotation.validityPeriod ? quotation.validityPeriod + ' jours' : 'Non spécifiée' %></p>
+          </div>`
+        },
+        { 
+          name: 'Notes',
+          path: 'notes',
+          template: `<div class="notes">
+            <h4>Notes</h4>
+            <p><%= quotation.notes || 'Aucune note' %></p>
+          </div>`
+        }
+      ]
+    }
+  };
+  case TemplateType.PAYMENT:
+    return {
+      details: {
+        title: 'Détails paiement',
+        fields: [
+          { 
+            name: 'Méthode de paiement', 
+            path: 'mode',
+            template: `<% if (payment.mode) { %>
+              <span class="payment-mode">
+                <% 
+                  const modeMap = {
+                    'CASH': 'Espèces',
+                    'CHECK': 'Chèque',
+                    'TRANSFER': 'Virement',
+                    'CREDIT_CARD': 'Carte bancaire'
+                  };
+                  const translatedMode = modeMap[payment.mode] || payment.mode;
+                %>
+                <%= translatedMode %>
+              </span>
+            <% } %>`
+          },
+          { name: 'Référence', path: 'sequential' },
+          { 
+            name: 'Date paiement', 
+            path: 'date',
+            template: `<%= payment.date ? new Date(payment.date).toLocaleDateString('fr-FR') : 'Non spécifiée' %>`
+          },
+          { 
+            name: 'Factures associées', 
+            path: 'invoices',
+            template: `<% if (payment.invoices?.length) { %>
+              <ul class="linked-invoices">
+                <% payment.invoices.forEach(invoice => { %>
+                  <li class="invoice-item">
+  <div class="invoice-row">
+    <span class="invoice-label">Numéro:</span>
+    <span class="invoice-value"><%= invoice.invoiceNumber || 'N/A' %></span>
+  </div>
+  <div class="invoice-row">
+    <span class="invoice-label">Date facture:</span>
+    <span class="invoice-value"><%= invoice.invoiceDate || 'N/A' %></span>
+  </div>
+  <div class="invoice-row">
+    <span class="invoice-label">Échéance:</span>
+    <span class="invoice-value"><%= invoice.dueDate || 'N/A' %></span>
+  </div>
+  <div class="invoice-row">
+    <span class="invoice-label">Total:</span>
+    <span class="invoice-value"><%= invoice.total || '0' %> <%= invoice.currency || '' %></span>
+  </div>
+  <div class="invoice-row">
+    <span class="invoice-label">Taux de change:</span>
+    <span class="invoice-value"><%= invoice.exchangeRate || '1.0' %></span>
+  </div>
+  <div class="invoice-row">
+    <span class="invoice-label">Paiement:</span>
+    <span class="invoice-value"><%= invoice.amount || '0' %> <%= invoice.currency || '' %></span>
+  </div>
+  <div class="invoice-row">
+    <span class="invoice-label">Montant restant:</span>
+    <span class="invoice-value"><%= invoice.remainingAmount >= 0 ? invoice.remainingAmount : 0 %> <%= invoice.currency || '' %></span>
+  </div>
+</li>
+                <% }); %>
+              </ul>
+            <% } else { %>
+              <p>Aucune facture associée</p>
+            <% } %>`
+          },
+          { 
+            name: 'Statut', 
+            path: 'status',
+            template: `<%= payment.status || 'Non spécifié' %>`
+          }
+        ]
+      },
+      totals: {
+        title: 'Montants',
+        fields: [
+          { 
+            name: 'Montant', 
+            path: 'amount',
+            template: `<%= payment.amount || 0 %> <%= payment.currency?.symbol || '' %>`
+          },
+          { 
+            name: 'Frais', 
+            path: 'fee',
+            template: `<%= payment.fee || 0 %> <%= payment.currency?.symbol || '' %>`
+          },
+          { 
+            name: 'Total', 
+            path: 'total',
+            template: `<%
+              const amount = payment.amount || 0;
+              const fee = payment.fee || 0;
+              const total = amount + fee;
+            %>
+            <%= total %> <%= payment.currency?.symbol || '' %>`
+          },
+          { 
+            name: 'Devise', 
+            path: 'currency.symbol',
+            template: `<%= payment.currency?.symbol || 'EUR' %>`
+          }
+        ]
+      }
+    }
       
       default:
         return {}

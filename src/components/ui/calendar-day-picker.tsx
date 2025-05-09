@@ -78,6 +78,8 @@ interface CalendarDatePickerProps
   yearsRange?: number;
   onDateSelect: (range: { from: Date; to: Date }) => void;
   isPending?: boolean;
+  disabled?: boolean;
+
 }
 
 export const CalendarDatePicker = React.forwardRef<HTMLButtonElement, CalendarDatePickerProps>(
@@ -93,6 +95,7 @@ export const CalendarDatePicker = React.forwardRef<HTMLButtonElement, CalendarDa
       onDateSelect,
       variant,
       isPending,
+      disabled = false,
       ...props
     },
     ref
@@ -380,7 +383,9 @@ export const CalendarDatePicker = React.forwardRef<HTMLButtonElement, CalendarDa
                 {...props}
                 className={cn('w-auto', multiSelectVariants({ variant, className }))}
                 onClick={handleTogglePopover}
-                suppressHydrationWarning>
+                suppressHydrationWarning
+                disabled={disabled} // Ajoutez cette ligne
+                >
                 <CalendarIcon className="mr-2 h-4 w-4" />
                 <span>
                   {date?.from ? (

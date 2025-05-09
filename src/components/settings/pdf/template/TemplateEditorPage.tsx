@@ -86,12 +86,17 @@ export function TemplateEditorPage({
       />
       
       <div className="bg-white rounded-lg shadow border mt-6">
-        <TiptapEditor
-          value={content}
-          onChange={setContent}
-          templateData={templateData}
-          templateId={templateId}
-        />
+      <TiptapEditor
+  value={content}
+  onChange={setContent}
+  templateData={templateData}
+  templateId={templateId}
+  templateName={name} // Ajoutez cette ligne
+  onNameChange={async (newName) => {
+    setName(newName);
+    return Promise.resolve(); // Retourne une promesse résolue
+  }}
+/>
       </div>
 
       <div className="mt-6 flex justify-end gap-4">

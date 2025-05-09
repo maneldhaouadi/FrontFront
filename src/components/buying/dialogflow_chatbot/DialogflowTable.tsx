@@ -107,7 +107,7 @@ type ComparisonParams = {
 
 type ComparisonResponse = {
   success: boolean;
-  message: string;
+  message?: string;
 };
 
 const getStoredSessions = (): Record<string, SessionData> => {
@@ -257,24 +257,16 @@ const DialogflowTable = ({
           }
         }
       });
-
-      if (response.fulfillmentText) {
-        return {
-          success: true,
-          message: response.fulfillmentText
-        };
-      } else {
-        const t = {
-          fr: "Erreur lors de la comparaison",
-          en: "Comparison error",
-          es: "Error de comparación"
-        }[lang];
-        
-        return {
-          success: false,
-          message: t
-        };
-      }
+  
+      return {
+        success: true,
+        message: response.fulfillmentText || 
+          (lang === 'fr' 
+            ? "Comparaison effectuée" 
+            : lang === 'en' 
+            ? "Comparison completed"
+            : "Comparación completada")
+      };
     } catch (error) {
       console.error('Comparison error:', error);
       const t = {
@@ -285,7 +277,7 @@ const DialogflowTable = ({
       
       return {
         success: false,
-        message: `${t}: ${error.message}`
+        message: `${t}: ${error instanceof Error ? error.message : String(error)}`
       };
     }
   };
@@ -442,10 +434,13 @@ const DialogflowTable = ({
           
           const botMessage: HistoryEntry = {
             sender: 'bot',
-            text: comparisonResult.message,
+            text: comparisonResult.message || 
+              (languageCode === 'fr' 
+                ? "Réponse de comparaison non disponible" 
+                : "Comparison response not available"),
             timestamp: new Date()
           };
-
+  
           setMessages(prev => [...prev, botMessage]);
           storeSession(sessionId, [...updatedMessages, botMessage]);
           setIsTyping(false);

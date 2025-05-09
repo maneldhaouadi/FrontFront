@@ -136,21 +136,21 @@ const ArticleHistoryList = ({ articleId }: { articleId: number }) => {
               className="cursor-pointer"
             >
               <Undo2 className="mr-2 h-4 w-4" />
-              {t('restore_version')}
+              {t('restaurer_version')}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => handleDownloadPdf(row.original.articleId, row.original.version)}
               className="cursor-pointer"
             >
               <Download className="mr-2 h-4 w-4" />
-              {t('download_pdf')}
+              {t('télécharger_pdf')}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => handleDeleteVersion(row.original.version)}
               className="cursor-pointer text-red-600"
             >
               <Trash2 className="mr-2 h-4 w-4" />
-              {t('delete_version')}
+              {t('supprimer_version')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -299,6 +299,37 @@ const updateInvoiceStatusIfExpired = async (invoiceId: number): Promise<ExpenseI
   }
 };
 
+// Ajoutez cette fonction à votre fichier API frontend (à la fin, avant l'export)
+const exportInvoicePdf = async (invoiceId: number, templateId?: number): Promise<void> => {
+  try {
+    // Construction de l'URL avec le templateId optionnel
+    let url = `public/templates/invoices/${invoiceId}/export-pdf`;
+    if (templateId) {
+      url += `?templateId=${templateId}`;
+    }
+
+    const response = await axios.get(url, {
+      responseType: 'blob' // Important pour les fichiers binaires
+    });
+
+    // Créer un lien temporaire pour le téléchargement
+    const urlObject = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = urlObject;
+    link.setAttribute('download', `facture-${invoiceId}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    
+    // Nettoyage
+    window.URL.revokeObjectURL(urlObject);
+    document.body.removeChild(link);
+  } catch (error) {
+    console.error('Error exporting invoice PDF:', error);
+    throw error;
+  }
+
+};
+
 
 export const expense_invoice = {
   factory,
@@ -310,5 +341,6 @@ export const expense_invoice = {
   remove,
   validate,
   deletePdfFile,
-  updateInvoiceStatusIfExpired
+  updateInvoiceStatusIfExpired,
+  exportInvoicePdf,
 };

@@ -22,7 +22,7 @@ export const getPaymentColumns = (t: Function, tCurrency: Function): ColumnDef<E
           attribute={EXPENSE_PAYMENT_FILTER_ATTRIBUTES.SEQUENTIAL}
         />
       ),
-      cell: ({ row }) => <div>PAY-{row.original.sequentialNumbr}</div>,
+      cell: ({ row }) => <div>{row.original.sequentialNumbr}</div>,
       enableSorting: true,
       enableHiding: true
     },

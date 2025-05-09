@@ -11,13 +11,13 @@ import {
 import { DotsHorizontalIcon } from '@radix-ui/react-icons';
 import { Row } from '@tanstack/react-table';
 import { useTranslation } from 'react-i18next';
-import { Settings2, Telescope, Trash2 } from 'lucide-react';
-import { ExpenseInvoice } from '@/types/expense_invoices';
+import { Download, Settings2, Telescope, Trash2 } from 'lucide-react';
+import { ExpensePayment } from '@/types/expense-payment';
 import { useExpensePaymentActions } from './ActionsContext';
 import { useExpensePaymentManager } from '../hooks/useExpensePaymentManager';
 
 interface DataTableRowActionsProps {
-  row: Row<ExpenseInvoice>;
+  row: Row<ExpensePayment>;
 }
 
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {
@@ -25,7 +25,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { t: tCommon } = useTranslation('common');
   const router = useRouter();
   const paymentManager = useExpensePaymentManager();
-  const { openDeleteDialog } = useExpensePaymentActions();
+  const { openDeleteDialog, openDownloadDialog } = useExpensePaymentActions();
 
   const targetInvoice = () => {
     paymentManager.set('id', payment?.id);
@@ -42,27 +42,27 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         <DropdownMenuLabel className="text-center">{tCommon('commands.actions')}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {/* Inspect */}
-        <DropdownMenuItem onClick={() => router.push('/buying/expense_payment/' + payment.id)}>
+        <DropdownMenuItem 
+          onClick={() => router.push(`/buying/expense_payment/${payment.id}?mode=inspect`)}>
           <Telescope className="h-5 w-5 mr-2" /> {tCommon('commands.inspect')}
         </DropdownMenuItem>
-        {/* Print */}
-       
-        {/* Duplicate */}
-        {/* <DropdownMenuItem
-          onClick={() => {
-            targetInvoice();
-            openDuplicateDialog();
-          }}>
-          <Copy className="h-5 w-5 mr-2" /> {tCommon('commands.duplicate')}
-        </DropdownMenuItem> */}
-        <DropdownMenuItem onClick={() => router.push('/buying/expense_payment/' + payment.id)}>
+        {/* Download */}
+        <DropdownMenuItem onClick={() => {
+          targetInvoice();
+          openDownloadDialog();
+        }}>
+          <Download className="h-5 w-5 mr-2" /> {tCommon('commands.download')}
+        </DropdownMenuItem>
+        {/* Modify */}
+        <DropdownMenuItem 
+          onClick={() => router.push(`/buying/expense_payment/${payment.id}?mode=edit`)}>
           <Settings2 className="h-5 w-5 mr-2" /> {tCommon('commands.modify')}
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => {
-            targetInvoice();
-            openDeleteDialog();
-          }}>
+        {/* Delete */}
+        <DropdownMenuItem onClick={() => {
+          targetInvoice();
+          openDeleteDialog();
+        }}>
           <Trash2 className="h-5 w-5 mr-2" /> {tCommon('commands.delete')}
         </DropdownMenuItem>
       </DropdownMenuContent>

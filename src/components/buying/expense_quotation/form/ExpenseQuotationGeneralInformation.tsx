@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
-import React from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/router';
 import { useTranslation } from 'react-i18next';
@@ -45,36 +45,81 @@ export const ExpenseQuotationGeneralInformation = ({
     (entry) => entry?.isMain
   );
 
-  const validateSequentialNumber = (value: string) => {
-    const sequentialNumberRegex = /^QUO-\d{4,5}$/;
-    return sequentialNumberRegex.test(value);
-  };
+  const [isValidating, setIsValidating] = useState(false);
 
+  
+  const validationTimeout = useRef<NodeJS.Timeout>();
+
+  const validateSequentialNumber = useCallback(async (value: string) => {
+    const sequentialNumberRegex = /^QUO-\d{4,5}$/;
+    
+    // Validation du format
+    if (!sequentialNumberRegex.test(value)) {
+      quotationManager.setError(
+        'sequentialNumbr', 
+        tInvoicing('quotation.invalid_sequential_number_format')
+      );
+      return false;
+    }
+  
+    setIsValidating(true);
+    try {
+      const exists = await api.expense_quotation.checkSequentialNumberExists(value);
+      if (exists) {
+        quotationManager.setError(
+          'sequentialNumbr', 
+          tInvoicing('quotation.sequential_number_exists')
+        );
+        return false;
+      }
+      
+      quotationManager.setError('sequentialNumbr', null);
+      return true;
+    } catch (error) {
+      console.error('Error checking sequential number:', error);
+      quotationManager.setError(
+        'sequentialNumbr', 
+        tInvoicing('quotation.sequential_number_check_failed')
+      );
+      return false;
+    } finally {
+      setIsValidating(false);
+    }
+  }, [quotationManager, tInvoicing]);
+
+  const handleSequentialNumberChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    quotationManager.set('sequentialNumbr', value);
+    quotationManager.setError('sequentialNumbr', null);
+  
+    if (validationTimeout.current) {
+      clearTimeout(validationTimeout.current);
+    }
+  
+    if (value.length >= 7) { // "QUO-123" = 7 caractères minimum
+      validationTimeout.current = setTimeout(() => {
+        validateSequentialNumber(value);
+      }, 500); // Délai de 500ms après le dernier changement
+    }
+  }, [quotationManager, validateSequentialNumber]);
+  
   const SequentialNumberError = () => {
     if (!quotationManager.sequentialNumbr) {
       return (
         <p className="text-xs text-red-500 mt-1">
-          Le numéro de devis est requis
+          {tInvoicing('quotation.sequential_number_required')}
         </p>
       );
     }
-    
-    if (!validateSequentialNumber(quotationManager.sequentialNumbr)) {
-      return (
-        <p className="text-xs text-red-500 mt-1">
-          {tInvoicing('quotation.invalid_sequential_number_format')}
-        </p>
-      );
-    }
-    
+  
     if (quotationManager.errors?.sequentialNumbr) {
       return (
         <p className="text-xs text-red-500 mt-1">
-          {tInvoicing('quotation.sequential_number_exists')}
+          {quotationManager.errors.sequentialNumbr}
         </p>
       );
     }
-    
+  
     return null;
   };
 
@@ -296,33 +341,33 @@ export const ExpenseQuotationGeneralInformation = ({
           )}
         </div>
         <div className="w-1/3">
-          <Label className="text-xs font-semibold mb-1">
-            {tInvoicing('quotation.singular')} N° *
-          </Label>
-          {edit && !isInspectMode ? (
-            <>
-              <Input
-                className={cn(
-                  "w-full h-8",
-                  (!quotationManager.sequentialNumbr || 
-                  !validateSequentialNumber(quotationManager.sequentialNumbr)) && 
-                  "border-red-500 focus-visible:ring-red-500"
-                )}
-                placeholder="Format: QUO-12345"
-                value={quotationManager.sequentialNumbr || ''}
-                onChange={(e) => {
-                  quotationManager.set('sequentialNumbr', e.target.value);
-                  quotationManager.setError('sequentialNumbr', null);
-                }}
-                isPending={loading}
-                required
-              />
-              <SequentialNumberError />
-            </>
-          ) : (
-            <UneditableInput value={quotationManager.sequentialNumbr || ''} />
-          )}
-        </div>
+  <Label className="text-xs font-semibold mb-1">
+    {tInvoicing('quotation.singular')} N° *
+  </Label>
+  {edit && !isInspectMode ? (
+    <div className="relative">
+      <Input
+        className={cn(
+          "w-full h-8",
+          quotationManager.errors?.sequentialNumbr && 
+          "border-red-500 focus-visible:ring-red-500"
+        )}
+        placeholder="Format: QUO-12345"
+        value={quotationManager.sequentialNumbr || ''}
+        onChange={handleSequentialNumberChange}
+        isPending={isValidating || loading}
+      />
+      {/* Afficher le message d'erreur sous le champ */}
+      {quotationManager.errors?.sequentialNumbr && (
+        <p className="text-xs text-red-500 mt-1 animate-fade-in">
+          {quotationManager.errors.sequentialNumbr}
+        </p>
+      )}
+    </div>
+  ) : (
+    <UneditableInput value={quotationManager.sequentialNumbr || ''} />
+  )}
+</div>
       </div>
 
       <div className="flex gap-1">

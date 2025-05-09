@@ -207,46 +207,33 @@ export const ExpenseQuotationCreateForm = ({ className, firmId }: ExpenseQuotati
   
     // Convert articles to DTO
     const articlesDto: ExpenseArticleQuotationEntry[] = articleManager.getArticles()?.map((article) => {
-      const defaultArticle = {
-        id: 0,
-        title: '',
-        description: '',
-        category: '',
-        subCategory: '',
-        purchasePrice: 0,
-        salePrice: 0,
-        quantityInStock: 0
-      };
-    
-      return {
-        id: article?.id,
-        article: {
-          ...defaultArticle,
-          id: article?.article?.id ?? 0,
-          title: article?.article?.title || '',
-          description: !controlManager.isArticleDescriptionHidden 
-            ? article?.article?.description || '' 
-            : '',
-          // Ajout des autres propriétés obligatoires
-          category: article?.article?.category || '',
-          subCategory: article?.article?.subCategory || '',
-          purchasePrice: article?.article?.purchasePrice || 0,
-          salePrice: article?.article?.salePrice || 0,
-          quantityInStock: article?.article?.quantityInStock || 0
-        },
-        quantity: article?.quantity || 0,
-        unit_price: article?.unit_price || 0,
-        discount: article?.discount || 0, // Correction de la faute de frappe (discount au lieu de discount)
-        discount_type: article?.discount_type === 'PERCENTAGE' 
-          ? DISCOUNT_TYPE.PERCENTAGE 
-          : DISCOUNT_TYPE.AMOUNT,
-        taxes: article?.articleExpensQuotationEntryTaxes
-          ?.map((entry) => entry?.tax?.id)
-          .filter((id): id is number => id !== undefined) || [],
-        // Ajout des propriétés manquantes de ExpenseArticleQuotationEntry si nécessaire
-        articleExpensQuotationEntryTaxes: article?.articleExpensQuotationEntryTaxes || []
-      };
-    }) || [];
+            // Création d'un objet article complet avec valeurs par défaut
+             const mappedArticle = {
+                    id: article?.id,
+                    article: {
+                      id: article?.article?.id ?? 0,
+                      title: article?.article?.title || '',
+                      description: article?.article?.description || '',
+                      reference: article?.article?.reference || '', // Ajout de la référence obligatoire
+                      quantityInStock: article?.article?.quantityInStock || 0,
+                      status: article?.article?.status || 'draft', // Valeur par défaut
+                      unitPrice: article?.article?.unitPrice || 0,// Ajout du prix unitaire,
+                      version:article?.article?.version || 0
+                       
+            
+                    },
+                    quantity: article?.quantity || 0,
+                    unit_price: article?.unit_price || 0,
+                    discount: article?.discount || 0,
+                    discount_type: article?.discount_type === 'PERCENTAGE' 
+                      ? DISCOUNT_TYPE.PERCENTAGE 
+                      : DISCOUNT_TYPE.AMOUNT,
+                    taxes: article?.articleExpensQuotationEntryTaxes?.map((entry) => entry?.tax?.id).filter(Boolean) as number[],
+                    expenseArticleInvoiceEntryTaxes: article?.articleExpensQuotationEntryTaxes || []
+                  };
+                
+                  return mappedArticle;
+                }) || [];
   
     // Gestion du fichier PDF
     let pdfFileId = quotationManager.pdfFileId; // ID du fichier PDF existant

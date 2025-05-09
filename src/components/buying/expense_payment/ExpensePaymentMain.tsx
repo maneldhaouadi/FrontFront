@@ -13,6 +13,7 @@ import { getErrorMessage } from '@/utils/errors';
 import { useExpensePaymentManager } from './hooks/useExpensePaymentManager';
 import { ExpensePaymentDeleteDialog } from './dialogs/ExpensePaymentDeleteDialog';
 import { ExpensePaymentActionsContext } from './data-table/ActionsContext';
+import { ExpensePaymentDownloadDialog } from './dialogs/ExpensePaymentDownloadDialog';
 
 interface ExpensePaymentMainProps {
   className?: string;
@@ -25,7 +26,7 @@ export const ExpensePaymentMain: React.FC<ExpensePaymentMainProps> = ({ classNam
   const { t: tCommon } = useTranslation('common');
   const { t: tInvoicing } = useTranslation('invoicing');
   const { t: tCurrency } = useTranslation('currency');
-
+  const [downloadDialog, setDownloadDialog] = React.useState(false);
   const { setRoutes } = useBreadcrumb();
   React.useEffect(() => {
     if (!firmId && !interlocutorId)
@@ -90,6 +91,7 @@ export const ExpensePaymentMain: React.FC<ExpensePaymentMainProps> = ({ classNam
   const context = {
     //dialogs
     openDeleteDialog: () => setDeleteDialog(true),
+  openDownloadDialog: () => setDownloadDialog(true),
     //search, filtering, sorting & paging
     searchTerm,
     setSearchTerm,
@@ -102,6 +104,26 @@ export const ExpensePaymentMain: React.FC<ExpensePaymentMainProps> = ({ classNam
     sortKey: sortDetails.sortKey,
     setSortDetails: (order: boolean, sortKey: string) => setSortDetails({ order, sortKey })
   };
+
+  const { mutate: downloadPayment, isPending: isDownloadPending } = useMutation({
+    mutationFn: (templateId?: number) => {
+      if (!paymentManager.id) throw new Error('Payment ID is missing');
+      return api.expensepayment.downloadPdf(paymentManager.id, templateId);
+    },
+    onSuccess: (pdfBlob) => {
+      const url = window.URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `paiement-${paymentManager.id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage('invoicing', error, 'Échec du téléchargement du paiement'));
+    }
+  });
 
   //Remove Invoice
   const queryClient = useQueryClient();
@@ -149,6 +171,15 @@ export const ExpensePaymentMain: React.FC<ExpensePaymentMainProps> = ({ classNam
   onClose={() => setDeleteDialog(false)}
   hasInvoices={(paymentManager as any)?.hasInvoices} // Solution temporaire
 />
+{paymentManager?.id && (
+  <ExpensePaymentDownloadDialog
+    id={paymentManager.id} // Pas de ? ici car on a déjà vérifié son existence
+    open={downloadDialog}
+    onDownload={(templateId) => downloadPayment(templateId)}
+    isDownloadPending={isDownloadPending}
+    onClose={() => setDownloadDialog(false)}
+  />
+)}
       <ExpensePaymentActionsContext.Provider value={context}>
         <Card className={className}>
           <CardHeader>

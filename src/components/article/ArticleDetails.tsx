@@ -351,7 +351,7 @@ const ArticleDetails: React.FC = () => {
             onClick={handleCompareWithPdf}
           >
             <FileText className="h-4 w-4" />
-            Compare with PDF
+            Comparer avec PDF
           </Button>
           
           <Button 
@@ -360,7 +360,7 @@ const ArticleDetails: React.FC = () => {
             onClick={handleCompareWithImage}
           >
             <Image className="h-4 w-4" />
-            Compare with Image
+            Comparer avec Image
           </Button>
 
           <Button
@@ -376,7 +376,7 @@ const ArticleDetails: React.FC = () => {
             ) : (
               <>
                 <Edit className="h-4 w-4" />
-                Edit
+                Modifier
               </>
             )}
           </Button>

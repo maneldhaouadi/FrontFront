@@ -1,6 +1,6 @@
 'use client';
 
-import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
+import { useEditor, EditorContent, BubbleMenu, Extension } from '@tiptap/react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import StarterKit from '@tiptap/starter-kit';
 import TextStyle from '@tiptap/extension-text-style';
@@ -14,22 +14,201 @@ import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { common, createLowlight } from 'lowlight';
-import { FaTrash, FaBold, FaItalic, FaUnderline, FaAlignLeft, FaAlignCenter, FaAlignRight, FaListUl, FaListOl, FaLink, FaTable, FaCode, FaSave, FaUndo, FaRedo, FaPalette, FaFont, FaImage, FaUpload } from 'react-icons/fa';
+import { FaTrash, FaBold, FaItalic, FaUnderline, FaAlignLeft, FaAlignCenter, FaAlignRight, FaListUl, FaListOl, FaLink, FaTable, FaCode, FaSave, FaUndo, FaRedo, FaPalette, FaFont, FaImage, FaUpload, FaGripLinesVertical, FaShapes, FaGripLines } from 'react-icons/fa';
 import { BiUndo, BiRedo } from 'react-icons/bi';
 import { TemplateFieldsPanel } from './TemplateFielsPanel';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Edit2, X } from 'lucide-react';
 import { Template, TemplateType, TemplateTypeValues } from '@/types/template';
 import { templateApi } from '@/api';
 import Image from '@tiptap/extension-image'; 
-
-
-
+import { Node } from '@tiptap/core';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 
 const lowlight = createLowlight(common);
 
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    stamp: {
+      setStamp: (options: { src: string }) => ReturnType;
+    };
+    signature: {
+      setSignature: (options: { src: string }) => ReturnType;
+    };
+    shape: {
+      setShape: (options: { 
+        type: string;
+        color: string;
+        width: string;
+        height: string;
+        align: string;
+      }) => ReturnType;
+    };
+    verticalRule: {
+      setVerticalRule: (options: { 
+        height: string;
+        thickness: string;
+        color: string;
+        align: string;
+      }) => ReturnType;
+    };
+    horizontalRule: {
+      setHorizontalRule: () => ReturnType;
+    };
+  }
+}
 
+interface ShapeOptions {
+  type: string;
+  color: string;
+  width: string;
+  height: string;
+  align: string;
+}
 
-// Extension Image personnalisée avec redimensionnement
+interface VerticalRuleOptions {
+  height: string;
+  thickness: string;
+  color: string;
+  align: string;
+}
+
+const Stamp = Node.create({
+  name: 'stamp',
+  group: 'block',
+  draggable: true,
+
+  addOptions() {
+    return {
+      HTMLAttributes: {
+        class: 'document-stamp',
+      },
+    };
+  },
+
+  addAttributes() {
+    return {
+      src: {
+        default: null,
+      },
+      alt: {
+        default: null,
+      },
+      title: {
+        default: null,
+      },
+      width: {
+        default: '150px',
+      },
+      height: {
+        default: 'auto',
+      },
+      align: {
+        default: 'left',
+      }
+    };
+  },
+
+  addCommands() {
+    return {
+      setStamp: (options: { src: string }) => ({ commands }: { commands: any }) => {
+        return commands.insertContent({
+          type: this.name,
+          attrs: options,
+        });
+      },
+    };
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    const { align, ...rest } = HTMLAttributes;
+    return [
+      'div', 
+      { 
+        class: 'document-stamp-container',
+        style: `float: ${align || 'left'}; margin-${align === 'right' ? 'left' : 'right'}: 10px;`
+      },
+      ['img', { ...rest, class: 'document-stamp-image' }],
+    ];
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'div.document-stamp-container img',
+      },
+    ];
+  },
+});
+
+const Signature = Node.create({
+  name: 'signature',
+  group: 'block',
+  draggable: true,
+
+  addOptions() {
+    return {
+      HTMLAttributes: {
+        class: 'document-signature',
+      },
+    };
+  },
+
+  addAttributes() {
+    return {
+      src: {
+        default: null,
+      },
+      alt: {
+        default: null,
+      },
+      title: {
+        default: null,
+      },
+      width: {
+        default: '200px',
+      },
+      height: {
+        default: 'auto',
+      },
+      align: {
+        default: 'left',
+      }
+    };
+  },
+
+  addCommands() {
+    return {
+      setSignature: (options: { src: string }) => ({ commands }: { commands: any }) => {
+        return commands.insertContent({
+          type: this.name,
+          attrs: options,
+        });
+      },
+    };
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    const { align, ...rest } = HTMLAttributes;
+    return [
+      'div', 
+      { 
+        class: 'document-signature-container',
+        style: `float: ${align || 'left'}; margin-${align === 'right' ? 'left' : 'right'}: 10px;`
+      },
+      ['img', { ...rest, class: 'document-signature-image' }],
+    ];
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'div.document-signature-container img',
+      },
+    ];
+  },
+});
+
 const CustomImage = Image.extend({
   addAttributes() {
     return {
@@ -44,38 +223,228 @@ const CustomImage = Image.extend({
       },
       width: {
         default: null,
-        renderHTML: attributes => ({
-          width: attributes.width
-        })
       },
       height: {
         default: null,
-        renderHTML: attributes => ({
-          height: attributes.height
-        })
       },
-      style: {
-        default: 'display: inline-block; position: relative;',
-        renderHTML: attributes => ({
-          style: attributes.style
-        })
+      align: {
+        default: 'left',
+        renderHTML: (attributes: { align?: string }) => {
+          if (!attributes.align) return {};
+          
+          return {
+            style: `float: ${attributes.align}; margin-${attributes.align === 'left' ? 'right' : 'left'}: 10px;`,
+          };
+        }
       }
-    }
+    };
   },
+  
   renderHTML({ HTMLAttributes }) {
+    const { align, ...rest } = HTMLAttributes;
+    
     return [
-      'div', 
+      'div',
       { 
         class: 'resizable-image-container',
-        style: HTMLAttributes.style
+        style: align ? `float: ${align}; margin-${align === 'left' ? 'right' : 'left'}: 10px;` : ''
       },
-      ['img', HTMLAttributes],
+      ['img', rest],
       ['div', { class: 'resize-handle' }]
-    ]
+    ];
+  },
+  
+  parseHTML() {
+    return [
+      {
+        tag: 'div.resizable-image-container img',
+        getAttrs: (node: HTMLElement | string) => {
+          if (typeof node === 'string') return false;
+          
+          const parent = node.parentElement;
+          if (!parent || !parent.classList.contains('resizable-image-container')) return false;
+          
+          const style = parent.getAttribute('style') || '';
+          const align = style.includes('float: right') ? 'right' : 
+                       style.includes('float: left') ? 'left' : 'left';
+                       
+          return {
+            align
+          };
+        }
+      }
+    ];
   }
 });
 
+const HorizontalRule = Extension.create({
+  name: 'horizontalRule',
+  addOptions() {
+    return {
+      HTMLAttributes: {
+        class: 'horizontal-rule',
+      },
+    };
+  },
+  addCommands() {
+    return {
+      setHorizontalRule: () => ({ commands }: { commands: any }) => {
+        return commands.insertContent('<hr class="horizontal-rule" />');
+      },
+    };
+  },
+});
 
+const Shape = Node.create({
+  name: 'shape',
+  group: 'block',
+  draggable: true,
+
+  addOptions() {
+    return {
+      HTMLAttributes: {
+        class: 'document-shape',
+      },
+    };
+  },
+
+  addAttributes() {
+    return {
+      type: {
+        default: 'rectangle',
+      },
+      color: {
+        default: '#000000',
+      },
+      width: {
+        default: '100px',
+      },
+      height: {
+        default: '50px',
+      },
+      align: {
+        default: 'left',
+      }
+    };
+  },
+
+  addCommands() {
+    return {
+      setShape: (options: ShapeOptions) => ({ commands }: { commands: any }) => {
+        return commands.insertContent({
+          type: this.name,
+          attrs: options,
+        });
+      },
+    };
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    const { type, color, width, height, align, ...rest } = HTMLAttributes;
+    let shapeContent = '';
+    
+    if (type === 'triangle') {
+      shapeContent = `
+        <svg width="${width}" height="${height}" viewBox="0 0 100 100">
+          <polygon points="50,0 100,100 0,100" fill="${color}"/>
+        </svg>
+      `;
+    } else if (type === 'circle') {
+      shapeContent = `
+        <svg width="${width}" height="${height}" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="45" fill="${color}"/>
+        </svg>
+      `;
+    } else { // rectangle par défaut
+      shapeContent = `
+        <svg width="${width}" height="${height}" viewBox="0 0 100 100">
+          <rect width="100" height="100" fill="${color}"/>
+        </svg>
+      `;
+    }
+
+    return [
+      'div', 
+      { 
+        class: 'document-shape-container',
+        style: `display: inline-block; margin: 10px; float: ${align || 'left'};`
+      },
+      ['div', { innerHTML: shapeContent }],
+    ];
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'div.document-shape-container',
+      },
+    ];
+  },
+});
+
+const VerticalRule = Node.create({
+  name: 'verticalRule',
+  group: 'block',
+  draggable: true,
+
+  addOptions() {
+    return {
+      HTMLAttributes: {
+        class: 'vertical-rule',
+      },
+    };
+  },
+
+  addAttributes() {
+    return {
+      height: {
+        default: '100px',
+      },
+      thickness: {
+        default: '2px',
+      },
+      color: {
+        default: '#000000',
+      },
+      align: {
+        default: 'left',
+      }
+    };
+  },
+
+  addCommands() {
+    return {
+      setVerticalRule: (options: VerticalRuleOptions) => ({ commands }: { commands: any }) => {
+        return commands.insertContent({
+          type: this.name,
+          attrs: options,
+        });
+      },
+    };
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    const { height, thickness, color, align, ...rest } = HTMLAttributes;
+    return [
+      'div', 
+      { 
+        class: 'vertical-rule-container',
+        style: `display: inline-block; height: ${height}; float: ${align || 'left'}; margin: 0 10px;`
+      },
+      ['div', { 
+        style: `width: ${thickness}; height: 100%; background-color: ${color}; display: inline-block;` 
+      }],
+    ];
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'div.vertical-rule-container',
+      },
+    ];
+  },
+});
 interface TiptapEditorProps {
   value: string;
   onChange: (content: string) => void;
@@ -83,6 +452,8 @@ interface TiptapEditorProps {
   templateData?: Template;
   onSaveComplete?: () => void;
   onLoad?: () => void;
+  templateName: string; // Ajouté
+  onNameChange?: (newName: string) => Promise<void>; // Ajouté
 }
 
 export default function TiptapEditor({
@@ -92,16 +463,35 @@ export default function TiptapEditor({
   templateData,
   onSaveComplete,
   onLoad,
+  templateName,
+  onNameChange,
 }: TiptapEditorProps) {
   const [showVariableMenu, setShowVariableMenu] = useState(false);
   const [showLinkMenu, setShowLinkMenu] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [showTablePopup, setShowTablePopup] = useState(false);
-
-  const [tableSize, setTableSize] = useState({
-    rows: 1,
-    cols: 1,
-  });
+  const [tableSize, setTableSize] = useState({ rows: 1, cols: 1 });
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState(templateName);
+  const [isSavingName, setIsSavingName] = useState(false);
+  const handleSaveName = async () => {
+    if (!onNameChange || editedName === templateName) {
+      setIsEditingName(false);
+      return;
+    }
+    
+    try {
+      setIsSavingName(true);
+      await onNameChange(editedName);
+      setIsEditingName(false);
+    } catch (error) {
+      console.error("Erreur lors de la mise à jour du nom", error);
+      setEditedName(templateName); // Revert on error
+    } finally {
+      setIsSavingName(false);
+    }
+  };
+  
   const [documentType, setDocumentType] = useState<TemplateType>(() => {
     if (templateData?.type) {
       const normalizedType = templateData.type.toLowerCase();
@@ -123,23 +513,34 @@ export default function TiptapEditor({
     return TemplateType.QUOTATION;
   });
 
-  // États pour le redimensionnement d'image
   const [resizing, setResizing] = useState(false);
-const [startSize, setStartSize] = useState({ 
-  width: 0, 
-  height: 0, 
-  x: 0, 
-  y: 0 
+  const [startSize, setStartSize] = useState({ width: 0, height: 0, x: 0, y: 0 });
+  const [currentImage, setCurrentImage] = useState<HTMLElement | null>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [currentColor, setCurrentColor] = useState('#000000');
+  const [showShapePopup, setShowShapePopup] = useState(false);
+const [shapeConfig, setShapeConfig] = useState({
+  type: 'rectangle',
+  color: '#000000',
+  width: '100px',
+  height: '50px',
+  align: 'left'
 });
-const [currentImage, setCurrentImage] = useState<HTMLElement | null>(null);
-const editorRef = useRef<HTMLDivElement>(null);
+  const colorPalette = [
+    '#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff',
+    '#ffff00', '#00ffff', '#ff00ff', '#c0c0c0', '#808080',
+    '#800000', '#808000', '#008000', '#800080', '#008080', '#000080'
+  ];
 
-
-
-  
-
-const editor = useEditor({
+  const editor = useEditor({
     extensions: [
+      Stamp,
+      Signature,
+      CustomImage, // Add this line
+      HorizontalRule,
+      Shape,
+      VerticalRule,
       StarterKit.configure({
         heading: {
           levels: [1, 2, 3],
@@ -171,6 +572,7 @@ const editor = useEditor({
         resizable: true,
         HTMLAttributes: {
           class: 'border-collapse border border-gray-800 my-4',
+          style: 'border: 1px solid #1e293b !important; border-collapse: collapse;'
         },
       }),
       TableRow.configure({
@@ -181,20 +583,15 @@ const editor = useEditor({
       TableCell.configure({
         HTMLAttributes: {
           class: 'border border-gray-400 p-2',
+          style: 'border: 1px solid #94a3b8 !important;'
         },
       }),
       TableHeader.configure({
         HTMLAttributes: {
           class: 'border border-gray-800 bg-gray-100 font-bold p-2',
+          style: 'border: 1px solid #1e293b !important;'
         },
       }),
-      CustomImage.configure({
-        inline: true,
-        allowBase64: true,
-        HTMLAttributes: {
-          class: 'resizable-image-container', // Changé de 'resizable-image'
-        },
-      })
     ],
     content: value,
     onUpdate: ({ editor }) => {
@@ -208,13 +605,45 @@ const editor = useEditor({
     },
   });
 
-  // Gestion du redimensionnement d'image
+  const insertCustomShape = useCallback(() => {
+    if (!editor) return;
+    editor.chain().focus().setShape(shapeConfig).run();
+    setShowShapePopup(false);
+  }, [editor, shapeConfig]);
+  
   useEffect(() => {
     if (!editor) return;
+      
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.classList.contains('resize-handle')) {
+        e.preventDefault();
+        const container = target.closest('.resizable-image-container') as HTMLElement;
+        if (container) {
+          const img = container.querySelector('img');
+          if (img) {
+            setResizing(true);
+            setCurrentImage(container);
+            setStartSize({
+              width: img.offsetWidth,
+              height: img.offsetHeight,
+              x: e.clientX,
+              y: e.clientY
+            });
+            document.body.style.cursor = 'nwse-resize';
+            document.body.style.userSelect = 'none';
+            container.classList.add('resizing');
+          }
+        }
+      }
+    };
+      }, [resizing, startSize, currentImage, editor]);
 
-
+  useEffect(() => {
+    if (!editor) return;
     
-  
+    
+
     const handleMouseDown = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (target.classList.contains('resize-handle')) {
@@ -251,7 +680,6 @@ const editor = useEditor({
       let newWidth = startSize.width + deltaX;
       let newHeight = startSize.height + deltaY;
       
-      // Contraintes de taille
       newWidth = Math.max(50, newWidth);
       newHeight = Math.max(50, newHeight);
       
@@ -288,34 +716,25 @@ const editor = useEditor({
     };
   }, [resizing, startSize, currentImage, editor]);
 
-
- const handleImageUpload = useCallback(
-  (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !editor) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const imageUrl = e.target?.result as string;
-      editor.chain().focus().setImage({ 
-        src: imageUrl,
-        width: '300px', // Taille initiale
-        height: 'auto',
-        style: 'display: inline-block; position: relative;'
-      }).run();
-    };
-    reader.readAsDataURL(file);
-  },
-  [editor]
-);
-
-  const [showColorPicker, setShowColorPicker] = useState(false);
-  const [currentColor, setCurrentColor] = useState('#000000');
-  const colorPalette = [
-    '#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff',
-    '#ffff00', '#00ffff', '#ff00ff', '#c0c0c0', '#808080',
-    '#800000', '#808000', '#008000', '#800080', '#008080', '#000080'
-  ];
+  const handleImageUpload = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file || !editor) return;
+  
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const imageUrl = e.target?.result as string;
+        editor.chain().focus().setImage({ 
+          src: imageUrl,
+          width: '300px',
+          height: 'auto',
+          align: 'left'
+        }).run();
+      };
+      reader.readAsDataURL(file);
+    },
+    [editor]
+  );
 
   const applyColor = useCallback(() => {
     if (!editor) return;
@@ -325,8 +744,8 @@ const editor = useEditor({
 
   const handleHoverTableSize = (rows: number, cols: number) => {
     setTableSize({
-      rows: Math.min(rows, 9),  // Limite à 9 lignes
-      cols: Math.min(cols, 9),  // Limite à 9 colonnes
+      rows: Math.min(rows, 9),
+      cols: Math.min(cols, 9),
     });
   };
 
@@ -364,14 +783,21 @@ const editor = useEditor({
   const insertDynamicField = useCallback((fieldPath: string, fieldType: 'invoice' | 'quotation' | 'payment') => {
     if (!editor) return;
     
+    // 1. Si le champ contient déjà une syntaxe EJS ou similaire, l'insérer tel quel
     if (fieldPath.match(/<%=|{%/)) {
       editor.commands.insertContent(fieldPath);
-    } else if (fieldPath.includes('{{')) {
+      return;
+    }
+  
+    // 2. Si le champ utilise la syntaxe {{variable}}
+    if (fieldPath.includes('{{')) {
       const convertedField = fieldPath.replace(/\{\{(.+?)\}\}/g, `<%= ${fieldType}.$1 %>`);
       editor.commands.insertContent(convertedField);
-    } else {
-      editor.commands.insertContent(`<%= ${fieldType}.${fieldPath} %>`);
+      return;
     }
+  
+    // 3. Cas standard - insérer avec le préfixe du type
+    editor.commands.insertContent(`<%= ${fieldType}.${fieldPath} %>`);
     
     setShowVariableMenu(false);
   }, [editor]);
@@ -388,14 +814,6 @@ const editor = useEditor({
     setLinkUrl('');
   }, [editor, linkUrl]);
 
-  const dynamicFields = [
-    { label: 'Document Number', field: 'meta.type' },
-    { label: 'Client Name', field: 'quotation.firm.name' },
-    { label: 'Company Name', field: 'quotation.cabinet.enterpriseName' },
-    { label: 'Total Amount', field: 'quotation.total' },
-    { label: 'Invoice Date', field: 'quotation.date' },
-  ];
-
   useEffect(() => {
     if (templateData?.type) {
       const normalizedType = templateData.type.toLowerCase();
@@ -410,75 +828,65 @@ const editor = useEditor({
   }
 
   return (
-<div className="border rounded-lg overflow-hidden bg-white shadow-sm flex flex-col" style={{ height: '80vh' }}>
-      <style jsx global>{`
-        .tiptap-editor {
-          padding: 1rem;
-          min-height: 700px;
-          border: 1px solid #e2e8f0;
-          border-radius: 0.5rem;
-        }
-
-        .tiptap-editor table {
-          border-collapse: collapse;
-          margin: 1rem 0;
-          width: 100%;
-          table-layout: fixed;
-          border: 1px solid #1e293b;
-        }
-
-        .tiptap-editor th,
-        .tiptap-editor td {
-          border: 1px solid #94a3b8;
-          padding: 0.5rem;
-          min-width: 50px;
-          position: relative;
-        }
-
-        .tiptap-editor th {
-          background-color: #f1f5f9;
-          font-weight: bold;
-          text-align: left;
-        }
-
-        .tiptap-editor .tableWrapper {
-          margin: 1rem 0;
-          overflow-x: auto;
-        }
-
-        .resizable-image {
-          display: inline-block;
-          position: relative;
-          max-width: 100%;
-        }
-
-        .resizable-image img {
-          max-width: 100%;
-          height: auto;
-        }
-
-        .resizable-image .resize-handle {
-          position: absolute;
-          right: -8px;
-          bottom: -8px;
-          width: 16px;
-          height: 16px;
-          background-color: #4299e1;
-          border-radius: 50%;
-          cursor: nwse-resize;
-          opacity: 0;
-          transition: opacity 0.2s;
-        }
-
-        .resizable-image:hover .resize-handle {
-          opacity: 1;
-        }
-
-        .resizable-image.resizing {
-          user-select: none;
-        }
-      `}</style>
+    <div className="border rounded-lg overflow-hidden bg-white shadow-sm flex flex-col" style={{ height: '80vh' }}>
       <div className="flex flex-wrap items-center gap-1 p-2 border-b bg-gray-50">
+      <div className="border-b bg-gray-50 p-2 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        {isEditingName ? (
+          <>
+            <Input
+              value={editedName}
+              onChange={(e) => setEditedName(e.target.value)}
+              className="h-8 w-64"
+              disabled={isSavingName}
+            />
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleSaveName}
+              disabled={isSavingName}
+            >
+              <FaSave className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => {
+                setIsEditingName(false);
+                setEditedName(templateName);
+              }}
+              disabled={isSavingName}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </>
+        ) : (
+          <>
+            <h2 className="text-lg font-semibold">{templateName}</h2>
+            {onNameChange && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setIsEditingName(true)}
+                className="text-muted-foreground hover:text-primary"
+              >
+                <Edit2 className="h-4 w-4" />
+              </Button>
+            )}
+          </>
+        )}
+      </div>
+      
+      <Button 
+        onClick={handleSave}
+        variant="outline"
+        size="sm"
+        className="ml-auto"
+      >
+        <FaSave className="mr-2 h-4 w-4" />
+        Enregistrer
+      </Button>
+    </div>
         <div className="flex items-center border-r border-gray-200 pr-2 mr-1">
           <button
             onClick={() => editor.chain().focus().undo().run()}
@@ -592,23 +1000,108 @@ const editor = useEditor({
           )}
         </div>
 
-        <div className="relative">
-          <button 
-            className="flex items-center gap-1 px-3 py-1 text-sm border rounded hover:bg-gray-100"
-          >
-            Affichage
-            <span>▼</span>
-          </button>
-        </div>
+        {showShapePopup && (
+  <div className="absolute z-50 left-0 mt-2 w-64 bg-white rounded-md shadow-lg border p-3">
+    <h3 className="text-sm font-medium mb-2">Configurer la forme</h3>
+    
+    <div className="mb-2">
+      <label className="block text-xs mb-1">Type</label>
+      <select 
+        value={shapeConfig.type}
+        onChange={(e) => setShapeConfig({...shapeConfig, type: e.target.value})}
+        className="w-full p-1 border rounded text-sm"
+      >
+        <option value="rectangle">Rectangle</option>
+        <option value="triangle">Triangle</option>
+        <option value="circle">Cercle</option>
+      </select>
+    </div>
+    
+    <div className="mb-2">
+      <label className="block text-xs mb-1">Couleur</label>
+      <input 
+        type="color" 
+        value={shapeConfig.color}
+        onChange={(e) => setShapeConfig({...shapeConfig, color: e.target.value})}
+        className="w-full"
+      />
+    </div>
+    
+    <div className="grid grid-cols-2 gap-2 mb-2">
+      <div>
+        <label className="block text-xs mb-1">Largeur</label>
+        <input 
+          type="text" 
+          value={shapeConfig.width}
+          onChange={(e) => setShapeConfig({...shapeConfig, width: e.target.value})}
+          className="w-full p-1 border rounded text-sm"
+          placeholder="100px"
+        />
+      </div>
+      <div>
+        <label className="block text-xs mb-1">Hauteur</label>
+        <input 
+          type="text" 
+          value={shapeConfig.height}
+          onChange={(e) => setShapeConfig({...shapeConfig, height: e.target.value})}
+          className="w-full p-1 border rounded text-sm"
+          placeholder="50px"
+        />
+      </div>
+    </div>
+    
+    <div className="mb-3">
+      <label className="block text-xs mb-1">Alignement</label>
+      <select 
+        value={shapeConfig.align}
+        onChange={(e) => setShapeConfig({...shapeConfig, align: e.target.value})}
+        className="w-full p-1 border rounded text-sm"
+      >
+        <option value="left">Gauche</option>
+        <option value="center">Centre</option>
+        <option value="right">Droite</option>
+      </select>
+    </div>
+    {/* Bouton Forme avec icône */}
+<button
+  onClick={() => setShowShapePopup(!showShapePopup)}
+  className={`p-2 rounded ${editor.isActive('shape') ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
+  title="Insérer une forme"
+>
+  <FaShapes />
+</button>
 
-        <div className="relative">
-          <button 
-            className="flex items-center gap-1 px-3 py-1 text-sm border rounded hover:bg-gray-100"
-          >
-            Paragraphe
-            <span>▼</span>
-          </button>
-        </div>
+{/* Bouton Ligne Horizontale avec icône */}
+<button
+  onClick={() => editor.chain().focus().setHorizontalRule().run()}
+  className={`p-2 rounded ${editor.isActive('horizontalRule') ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
+  title="Insérer une ligne horizontale"
+>
+  <FaGripLines />
+</button>
+
+{/* Bouton Ligne Verticale avec icône */}
+<button
+  onClick={() => editor.chain().focus().setVerticalRule({
+    height: '100px',
+    thickness: '2px',
+    color: '#000000',
+    align: 'left'
+  }).run()}
+  className={`p-2 rounded ${editor.isActive('verticalRule') ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
+  title="Insérer une ligne verticale"
+>
+  <FaGripLinesVertical />
+</button>
+    
+    <button
+      onClick={insertCustomShape}
+      className="w-full py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+    >
+      Insérer
+    </button>
+  </div>
+)}
 
         <div className="border-l h-6 mx-2"></div>
 
@@ -684,27 +1177,53 @@ const editor = useEditor({
 
         <div className="border-l h-6 mx-2"></div>
 
-        <button
-          onClick={() => editor.chain().focus().setTextAlign('left').run()}
-          className={`p-2 rounded ${editor.isActive({ textAlign: 'left' }) ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-          title="Aligner à gauche"
-        >
-          <FaAlignLeft />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().setTextAlign('center').run()}
-          className={`p-2 rounded ${editor.isActive({ textAlign: 'center' }) ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-          title="Centrer"
-        >
-          <FaAlignCenter />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().setTextAlign('right').run()}
-          className={`p-2 rounded ${editor.isActive({ textAlign: 'right' }) ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-          title="Aligner à droite"
-        >
-          <FaAlignRight />
-        </button>
+<button
+  onClick={() => {
+    if (editor.isActive('image')) {
+      editor.chain().focus().updateAttributes('image', { align: 'left' }).run();
+    } else {
+      editor.chain().focus().setTextAlign('left').run();
+    }
+  }}
+  className={`p-2 rounded ${editor.isActive({ textAlign: 'left' }) || 
+    (editor.isActive('image') && editor.getAttributes('image').align === 'left') ? 
+    'bg-gray-200' : 'hover:bg-gray-100'}`}
+  title="Aligner à gauche"
+>
+  <FaAlignLeft />
+</button>
+
+<button
+  onClick={() => {
+    if (editor.isActive('image')) {
+      editor.chain().focus().updateAttributes('image', { align: 'center' }).run();
+    } else {
+      editor.chain().focus().setTextAlign('center').run();
+    }
+  }}
+  className={`p-2 rounded ${editor.isActive({ textAlign: 'center' }) || 
+    (editor.isActive('image') && editor.getAttributes('image').align === 'center') ? 
+    'bg-gray-200' : 'hover:bg-gray-100'}`}
+  title="Centrer"
+>
+  <FaAlignCenter />
+</button>
+
+<button
+  onClick={() => {
+    if (editor.isActive('image')) {
+      editor.chain().focus().updateAttributes('image', { align: 'right' }).run();
+    } else {
+      editor.chain().focus().setTextAlign('right').run();
+    }
+  }}
+  className={`p-2 rounded ${editor.isActive({ textAlign: 'right' }) || 
+    (editor.isActive('image') && editor.getAttributes('image').align === 'right') ? 
+    'bg-gray-200' : 'hover:bg-gray-100'}`}
+  title="Aligner à droite"
+>
+  <FaAlignRight />
+</button>
 
         <div className="border-l h-6 mx-2"></div>
 
@@ -751,6 +1270,101 @@ const editor = useEditor({
           >
             <FaTrash />
           </button>
+          {showShapePopup && (
+  <div className="absolute z-50 left-0 mt-2 w-64 bg-white rounded-md shadow-lg border p-3">
+    <h3 className="text-sm font-medium mb-2">Configurer la forme</h3>
+    
+    <div className="mb-2">
+      <label className="block text-xs mb-1">Type</label>
+      <select 
+        value={shapeConfig.type}
+        onChange={(e) => setShapeConfig({...shapeConfig, type: e.target.value})}
+        className="w-full p-1 border rounded text-sm"
+      >
+        <option value="rectangle">Rectangle</option>
+        <option value="triangle">Triangle</option>
+        <option value="circle">Cercle</option>
+      </select>
+    </div>
+    
+    <div className="mb-2">
+      <label className="block text-xs mb-1">Couleur</label>
+      <input 
+        type="color" 
+        value={shapeConfig.color}
+        onChange={(e) => setShapeConfig({...shapeConfig, color: e.target.value})}
+        className="w-full"
+      />
+    </div>
+    
+    <div className="grid grid-cols-2 gap-2 mb-2">
+      <div>
+        <label className="block text-xs mb-1">Largeur</label>
+        <input 
+          type="text" 
+          value={shapeConfig.width}
+          onChange={(e) => setShapeConfig({...shapeConfig, width: e.target.value})}
+          className="w-full p-1 border rounded text-sm"
+          placeholder="100px"
+        />
+      </div>
+      <div>
+        <label className="block text-xs mb-1">Hauteur</label>
+        <input 
+          type="text" 
+          value={shapeConfig.height}
+          onChange={(e) => setShapeConfig({...shapeConfig, height: e.target.value})}
+          className="w-full p-1 border rounded text-sm"
+          placeholder="50px"
+        />
+      </div>
+    </div>
+    
+    <div className="mb-3">
+      <label className="block text-xs mb-1">Alignement</label>
+      <select 
+        value={shapeConfig.align}
+        onChange={(e) => setShapeConfig({...shapeConfig, align: e.target.value})}
+        className="w-full p-1 border rounded text-sm"
+      >
+        <option value="left">Gauche</option>
+        <option value="center">Centre</option>
+        <option value="right">Droite</option>
+      </select>
+    </div>
+    
+    <button
+    onClick={() => setShowShapePopup(!showShapePopup)}
+    className="p-2 rounded hover:bg-gray-100"
+    title="Insérer une forme"
+  >
+    Forme
+  </button>
+
+  {/* Bouton pour la ligne horizontale */}
+  <button
+    onClick={() => editor.chain().focus().setHorizontalRule().run()}
+    className="p-2 rounded hover:bg-gray-100"
+    title="Insérer une ligne horizontale"
+  >
+    Ligne Horizontale
+  </button>
+
+  {/* Bouton pour la ligne verticale */}
+  <button
+    onClick={() => editor.chain().focus().setVerticalRule({
+      height: '100px',
+      thickness: '2px',
+      color: '#000000',
+      align: 'left'
+    }).run()}
+    className="p-2 rounded hover:bg-gray-100"
+    title="Insérer une ligne verticale"
+  >
+    Ligne Verticale
+  </button>
+  </div>
+)}
           {/* Dans la partie Tableau du JSX */}
 {showTablePopup && (
   <div className="absolute z-50 left-0 mt-2 w-64 bg-white rounded-md shadow-lg border">
@@ -814,7 +1428,39 @@ const editor = useEditor({
             />
           </label>
         </div>
+         {/* Bouton pour ajouter un cachet */}
+<div className="relative">
+  <button
+    onClick={() => {
+      const url = window.prompt('Entrez l\'URL du cachet');
+      if (url) {
+        editor.chain().focus().setStamp({ src: url }).run();
+      }
+    }}
+    className="p-2 rounded hover:bg-gray-100"
+    title="Ajouter un cachet"
+  >
+    Cachet
+  </button>
+</div>
+
+{/* Bouton pour ajouter une signature */}
+<div className="relative">
+  <button
+    onClick={() => {
+      const url = window.prompt('Entrez l\'URL de la signature');
+      if (url) {
+        editor.chain().focus().setSignature({ src: url }).run();
+      }
+    }}
+    className="p-2 rounded hover:bg-gray-100"
+    title="Ajouter une signature"
+  >
+    Signature
+  </button>
+</div>
       </div>
+      
 
       {editor && (
         <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }}>
@@ -861,16 +1507,16 @@ const editor = useEditor({
       )}
 
 <div className="flex-1 overflow-auto">
-      <EditorContent 
-        editor={editor}
-        className="tiptap-editor"
-        style={{ 
-          minHeight: '100%',
-          overflow: 'visible' // Important pour le contenu éditable
-        }}
-        ref={editorRef}
-      />
-    </div>
+<EditorContent 
+      editor={editor}
+      className="tiptap-editor"
+      style={{ 
+        minHeight: '100%', // S'adapte à la hauteur disponible
+        overflow: 'visible' // Permet au contenu de déborder si nécessaire
+      }}
+      ref={editorRef}
+    />
+  </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import React from 'react';
 
 export const ExpensePaymentActionsContext = React.createContext({
   openDeleteDialog: () => {},
+  openDownloadDialog:()=>{},
   searchTerm: '',
   setSearchTerm: (value: string) => {},
   page: 1,
