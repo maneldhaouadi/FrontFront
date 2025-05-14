@@ -2,7 +2,7 @@ import React from 'react';
 import { useRouter } from 'next/router';
 import { cn } from '@/lib/utils';
 import { api } from '@/api';
-import {CreateExpensQuotationDto,ExpenseArticleQuotationEntry, EXPENSQUOTATION_STATUS} from '@/types';
+import {CreateExpensArticleQuotationEntry, CreateExpensQuotationDto,ExpenseArticleQuotationEntry, EXPENSQUOTATION_STATUS} from '@/types';
 import { Spinner } from '@/components/common';
 import { Card, CardContent } from '@/components/ui/card';
 import useTax from '@/hooks/content/useTax';
@@ -205,35 +205,51 @@ export const ExpenseQuotationCreateForm = ({ className, firmId }: ExpenseQuotati
   const onSubmit = async (status: EXPENSQUOTATION_STATUS) => {
     setSubmitted(true);
   
+
+    const references = new Set<string>();
+    for (const article of articleManager.getArticles() || []) {
+      const reference = article.article?.reference;
+      if (!reference) {
+        throw new Error(`La référence est obligatoire pour l'article: ${article.article?.title || 'Sans titre'}`);
+      }
+      
+      
+      if (references.has(reference.toLowerCase())) {
+        throw new Error(`La référence ${reference} est utilisée plusieurs fois dans ce devis`);
+      }
+      references.add(reference.toLowerCase());
+    }
     // Convert articles to DTO
-    const articlesDto: ExpenseArticleQuotationEntry[] = articleManager.getArticles()?.map((article) => {
-            // Création d'un objet article complet avec valeurs par défaut
-             const mappedArticle = {
-                    id: article?.id,
-                    article: {
-                      id: article?.article?.id ?? 0,
-                      title: article?.article?.title || '',
-                      description: article?.article?.description || '',
-                      reference: article?.article?.reference || '', // Ajout de la référence obligatoire
-                      quantityInStock: article?.article?.quantityInStock || 0,
-                      status: article?.article?.status || 'draft', // Valeur par défaut
-                      unitPrice: article?.article?.unitPrice || 0,// Ajout du prix unitaire,
-                      version:article?.article?.version || 0
-                       
-            
-                    },
-                    quantity: article?.quantity || 0,
-                    unit_price: article?.unit_price || 0,
-                    discount: article?.discount || 0,
-                    discount_type: article?.discount_type === 'PERCENTAGE' 
-                      ? DISCOUNT_TYPE.PERCENTAGE 
-                      : DISCOUNT_TYPE.AMOUNT,
-                    taxes: article?.articleExpensQuotationEntryTaxes?.map((entry) => entry?.tax?.id).filter(Boolean) as number[],
-                    expenseArticleInvoiceEntryTaxes: article?.articleExpensQuotationEntryTaxes || []
-                  };
-                
-                  return mappedArticle;
-                }) || [];
+    const articlesDto: CreateExpensArticleQuotationEntry[] = articleManager.getArticles()?.map((article) => {
+      if (!article.article?.reference) {
+        throw new Error(`La référence est obligatoire pour l'article: ${article.article?.title || 'Sans titre'}`);
+      }
+  
+      return {
+        id: article?.id,
+        reference: article.article.reference, // Include reference at the entry level
+        article: {
+          id: article?.article?.id ?? undefined, // undefined for new articles
+          title: article?.article?.title || '',
+          description: article?.article?.description || '',
+          reference: article.article.reference, // Ensure reference is included
+          quantityInStock: article?.article?.quantityInStock || 0,
+          status: article?.article?.status || 'draft',
+          version: article?.article?.version || 0
+        },
+        quantity: article?.quantity || 1, // Default to 1 instead of 0
+        unit_price: article?.unit_price || 0,
+        discount: article?.discount || 0,
+        discount_type: article?.discount_type === 'PERCENTAGE' 
+          ? DISCOUNT_TYPE.PERCENTAGE 
+          : DISCOUNT_TYPE.AMOUNT,
+        taxes: article?.articleExpensQuotationEntryTaxes
+          ?.map((entry) => entry?.tax?.id)
+          .filter(Boolean) as number[],
+        orderedQuantity: article?.quantity || 1, // Include ordered quantity
+        originalStock: article?.article?.quantityInStock || 0 // Include original stock
+      };
+    }) || [];
   
     // Gestion du fichier PDF
     let pdfFileId = quotationManager.pdfFileId; // ID du fichier PDF existant

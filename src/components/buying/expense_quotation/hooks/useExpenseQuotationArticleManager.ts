@@ -109,9 +109,9 @@ export const useExpenseQuotationArticleManager = create<ExpenseQuotationArticleM
   articles: [],
   taxSummary: [],
 
-  add: (article: ExpenseArticleQuotationEntry = {}) => {
+  add: (article: ExpenseArticleQuotationEntry = { reference: '' }) => {
     const { subTotal, total } = calculateForExpenseQuotation(article);
-
+  
     set((state) => ({
       articles: [
         ...state.articles,
@@ -121,18 +121,17 @@ export const useExpenseQuotationArticleManager = create<ExpenseQuotationArticleM
             ...article,
             total,
             subTotal,
-            discount_type: article.discount_type|| DISCOUNT_TYPE.AMOUNT,
+            discount_type: article.discount_type || DISCOUNT_TYPE.AMOUNT,
             discount: article.discount || 0
           }
         }
       ]
     }));
-
+  
     set(() => ({
       taxSummary: calculateTaxSummary(get().articles)
     }));
   },
-
   update: (id: string, article: ExpenseArticleQuotationEntry) => {
     const { subTotal, total } = calculateForExpenseQuotation(article);
 

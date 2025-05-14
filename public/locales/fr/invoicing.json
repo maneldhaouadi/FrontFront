@@ -33,18 +33,18 @@
       "no_date": "Date manquante",
       "no_due_date": "Date d'échéance manquante",
       "additional_files":"additional_files",
-      "invalid_sequential_number_format": "Format invalide. Doit être QUO-12345",
-      "sequential_number_exists": "Ce numéro existe déjà",
-      "sequential_number_check_failed": "Échec de la vérification du numéro",
-      "sequential_number_required": "Le numéro est requis"
-    },
+      "invalid_sequential_number_format": "Le format du numéro séquentiel est invalide (doit être QUO- suivi de 4 ou 5 chiffres)",
+      "sequential_number_already_exists": "Ce numéro séquentiel existe déjà",
+      "sequential_number_check_failed": "Échec de la vérification du numéro séquentiel",
+      "sequential_number_required": "Le numéro séquentiel est requis"},
     "card_description": "Cette section fournit une vue claire et organisée de tous vos devis.",
     "errors": {
       "surpassed_tax_limit": "Vous avez utilisé tous les taxes disponibles",
       "article_already_exists": "Cet article existe déjà dans la liste",
       "quantity_unavailable": "Quantité indisponible en stock",
-      "out_of_stock": "En rupture de stock"
-
+      "out_of_stock": "En rupture de stock",
+      "reference_exists": "Cette référence d'article existe déjà dans le devis"
+     
     },
     "new": "Nouveau devis",
     "status": {
@@ -129,7 +129,8 @@
       "tax_excluded": "Prix HT",
       "tax_included": "Prix TTC",
       "unit_price": "P.U",
-      "description": "Description"
+      "description": "Description",
+      "reference":"reference"
     },
     "no_applied_tax": "Aucune taxe appliquée",
     "manager": "Gestion articles",

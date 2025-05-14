@@ -13,7 +13,9 @@ interface ExpensePaymentFinancialInformationProps {
   className?: string;
   currency?: Currency;
   loading?: boolean;
-  disabled?: boolean; // Ajout de la prop disabled
+  disabled?: boolean; 
+  exchangeRate?: number; // ✅ ajout de cette ligne
+  // Ajout de la prop disabled
 
 }
 
@@ -21,7 +23,9 @@ export const ExpensePaymentFinancialInformation = ({
   className,
   currency,
   loading,
-  disabled = false, // Valeur par défaut
+  disabled = false,
+  exchangeRate = 1, // ✅ ajout de la valeur par défaut
+  // Valeur par défaut
 }: ExpensePaymentFinancialInformationProps) => {
   const { t: tInvoicing } = useTranslation('invoicing');
   const paymentManager = useExpensePaymentManager();
@@ -46,8 +50,9 @@ export const ExpensePaymentFinancialInformation = ({
   // Calculate financial values
   const amountPaid = paymentManager.amount || 0;
   const fee = paymentManager.fee || 0;
-  const available = ciel(amountPaid + fee, currencyDigitAfterComma + 1);
-  const used = invoiceManager.calculateUsedAmount();
+ const amountInEur = (amountPaid + fee) * exchangeRate;
+const available = ciel(amountInEur, currencyDigitAfterComma + 1); // ✅ conversion TND -> EUR
+const used = invoiceManager.calculateUsedAmount();
   const remaining_amount = ciel(available - used, currencyDigitAfterComma + 1);
 
   const handleFeeChange = (e: React.ChangeEvent<HTMLInputElement>) => {

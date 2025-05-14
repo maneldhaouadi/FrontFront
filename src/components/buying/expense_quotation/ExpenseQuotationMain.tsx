@@ -186,23 +186,20 @@ const [isDownloadPending, setIsDownloadPending] = React.useState(false);
   });
 
   const { mutate: duplicateQuotation, isPending: isDuplicationPending } = useMutation({
-    mutationFn: (duplicateQuotationDto: DuplicateExpensQuotationDto) => {
-      // Mettre à jour l'état includeFiles avant la duplication
-      quotationManager.set('includeFiles', duplicateQuotationDto.includeFiles);
-      return api.expense_quotation.duplicate(duplicateQuotationDto);
-    },
-    onSuccess: async (data) => {
-      toast.success(tInvoicing('quotation.action_duplicate_success'));
-      await router.push('/buying/expense_quotation/' + data.id);
-      setDuplicateDialog(false);
+    mutationFn: (params: { id: number; includeFiles: boolean }) => 
+      api.expense_quotation.duplicate(params),
+    onSuccess: (data) => {
+      toast.success('Devis dupliqué avec succès');
+      // Log des nouvelles références
+      console.log('Références des articles dupliqués:', 
+        data.expensearticleQuotationEntries?.map(e => e.reference));
+      router.push(`/buying/expense_quotation/${data.id}`);
     },
     onError: (error) => {
-      toast.error(
-        getErrorMessage('invoicing', error, tInvoicing('quotation.action_duplicate_failure'))
-      );
+      toast.error('Échec de la duplication');
+      console.error('Erreur:', error);
     }
-});
-
+  });
   //Invoice quotation
   const { mutate: invoiceQuotation, isPending: isInvoicingPending } = useMutation({
     mutationFn: (data: { id?: number; createInvoice: boolean }) =>
@@ -242,26 +239,25 @@ const [isDownloadPending, setIsDownloadPending] = React.useState(false);
         onClose={() => setDeleteDialog(false)}
       />
       <ExpenseQuotationDuplicateDialog
-  id={quotationManager?.id ?? 0} // Utilisation de l'opérateur nullish coalescing
+  id={quotationManager?.id ?? 0}
   open={duplicateDialog}
   onClose={() => setDuplicateDialog(false)}
-  duplicateQuotation={(includeFiles: boolean) => {
+  duplicateQuotation={({ includeFiles }) => {
     if (!quotationManager?.id) {
-      console.error("Cannot duplicate - missing quotation ID");
       toast.error(tInvoicing('quotation.missing_id_error'));
       return;
     }
 
-    // Réinitialisation des états PDF si includeFiles est false
+    // Nettoyage des fichiers si nécessaire
     if (!includeFiles) {
       quotationManager.set('pdfFile', null);
       quotationManager.set('uploadPdfField', null);
       quotationManager.set('pdfFileId', null);
     }
 
-    duplicateQuotation({
-      id: quotationManager.id,
-      includeFiles
+    duplicateQuotation({ 
+      id: quotationManager.id, 
+      includeFiles 
     });
   }}
   isDuplicationPending={isDuplicationPending}

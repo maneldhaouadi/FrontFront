@@ -478,6 +478,16 @@ const getStockHealth = async (): Promise<StockHealth> => {
   }
 };
 
+const findOneByReference = async (reference: string): Promise<Article | null> => {
+  try {
+    const response = await axios.get<Article>(`/public/article/by-reference/${reference}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error finding article by reference:', error);
+    throw error;
+  }
+};
+
 
 // N'oubliez pas d'ajouter ces méthodes à l'objet exporté à la fin du fichier
 export const article = {
@@ -514,5 +524,6 @@ export const article = {
   getQualityScores,
   getSuspiciousArticles,
   getPriceTrends,
-  getStockHealth
+  getStockHealth,
+  findOneByReference
 };

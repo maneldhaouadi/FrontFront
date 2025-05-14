@@ -126,18 +126,18 @@ export const ExpenseQuotationArticleManagement: React.FC<ExpenseQuotationArticle
                     id={item} 
                     onDelete={edit && !isInspectMode ? handleDelete : undefined}
                   >
-                    <ExpenseQuotationArticleItem
-                      article={item.article}
-                      onChange={(article) => !isInspectMode && articleManager.update(item.id, article)}
-                      taxes={taxes}
-                      showDescription={!isArticleDescriptionHidden}
-                      currency={quotationManager.currency}
-                      edit={edit && !isInspectMode} // Désactive l'édition en mode inspection
-                      existingEntries={articleManager.articles.map(item => ({
-                        ...item.article,
-                        id: Number(item.id) // Conversion de string à number
-                      }))}
-                    />
+                   <ExpenseQuotationArticleItem
+  article={item.article}
+  onChange={(article) => !isInspectMode && articleManager.update(item.id, article)}
+  taxes={taxes}
+  showDescription={!isArticleDescriptionHidden}
+  currency={quotationManager.currency}
+  edit={edit && !isInspectMode}
+  existingEntries={articleManager.articles.map(entry => ({
+    ...entry.article,
+    id: entry.id // Make sure this matches the expected type
+  }))}
+/>
                   </SortableLinks>
                 ))}
             </SortableContext>

@@ -23,13 +23,18 @@ import {
 } from '@/components/ui/drawer';
 import { Checkbox } from '@/components/ui/checkbox';
 
+interface DuplicateParams {
+  id: number;
+  includeFiles: boolean;
+}
+
 interface ExpenseQuotationDuplicateDialogProps {
   className?: string;
   id: number;
   open: boolean;
-  duplicateQuotation: (includeFiles: boolean) => void; // Fonction pour dupliquer le devis
-  isDuplicationPending?: boolean; // Indique si la duplication est en cours
-  onClose: () => void; // Fonction pour fermer la boîte de dialogue
+  duplicateQuotation: (params: { includeFiles: boolean }) => void; // Modifié ici
+  isDuplicationPending?: boolean;
+  onClose: () => void;
 }
 
 export const ExpenseQuotationDuplicateDialog: React.FC<ExpenseQuotationDuplicateDialogProps> = ({
@@ -43,47 +48,55 @@ export const ExpenseQuotationDuplicateDialog: React.FC<ExpenseQuotationDuplicate
   const { t: tCommon } = useTranslation('common');
   const { t: tInvoicing } = useTranslation('invoicing');
   const isDesktop = useMediaQuery('(min-width: 1500px)');
-  const [includeFiles, setIncludeFiles] = React.useState(false); // État pour inclure les fichiers
+  const [includeFiles, setIncludeFiles] = React.useState(false);
+
+  const handleDuplicate = () => {
+    duplicateQuotation({ includeFiles }); // Maintenant compatible
+    setIncludeFiles(false);
+  };
 
   const header = (
     <Label className="leading-5">
-      Voulez-vous vraiment dupliquer le devis?
+      {tInvoicing('quotation.confirm_duplicate')}
     </Label>
   );
 
   const content = (
     <div className="flex gap-2 items-center">
-      {/* Case à cocher pour inclure les fichiers */}
       <Checkbox
         checked={includeFiles}
         onCheckedChange={() => setIncludeFiles(!includeFiles)}
-      />{' '}
+      />
       <Label>{tInvoicing('quotation.file_duplication')}</Label>
     </div>
   );
 
   const footer = (
     <div className="flex gap-2 mt-2 items-center justify-center">
-      {/* Bouton pour confirmer la duplication */}
-      <Button
-        className="w-1/2 flex gap-1"
-        onClick={() => {
-          duplicateQuotation(includeFiles); // Appeler la fonction de duplication avec l'état includeFiles
-          setIncludeFiles(false); // Réinitialiser l'état après la duplication
-        }}
+     <Button
+      onClick={handleDuplicate}
+      disabled={isDuplicationPending}className="w-1/2 flex gap-1"
       >
-        <Check className="h-4 w-4" />
-        {tCommon('commands.duplicate')}
-        {/* Afficher un spinner pendant la duplication */}
-        <Spinner size={'small'} show={isDuplicationPending} />
+        {isDuplicationPending ? (
+          <>
+            <Spinner size="small" />
+            {tCommon('status.duplicating')}
+          </>
+        ) : (
+          <>
+            <Check className="h-4 w-4" />
+            {tCommon('commands.duplicate')}
+          </>
+        )}
       </Button>
-      {/* Bouton pour annuler */}
       <Button
         className="w-1/2 flex gap-1"
-        variant={'secondary'}
-        onClick={() => onClose()}
+        variant="secondary"
+        onClick={onClose}
+        disabled={isDuplicationPending}
       >
-        <X className="h-4 w-4" /> {tCommon('commands.cancel')}
+        <X className="h-4 w-4" />
+        {tCommon('commands.cancel')}
       </Button>
     </div>
   );

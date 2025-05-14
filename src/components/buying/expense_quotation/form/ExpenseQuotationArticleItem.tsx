@@ -22,14 +22,13 @@ import { ExpenseInvoiceTaxEntries } from '../../expense_invoice/form/ExpenseInvo
 interface ExpenseQuotationArticleItemProps {
   className?: string;
   article: ExpenseArticleQuotationEntry;
-  onChange: (item:ExpenseArticleQuotationEntry) => void;
+  onChange: (item: ExpenseArticleQuotationEntry) => void;
   showDescription?: boolean;
   currency?: Currency;
   taxes: Tax[];
   edit?: boolean;
   articles?: Article[];
-  existingEntries?: ExpenseArticleQuotationEntry[] | { id: string; article?: Article }[]; // Modification ici
-
+  existingEntries?: (ExpenseArticleQuotationEntry | { id: string; article?: Article })[];
 }
 
 export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemProps> = ({
@@ -76,8 +75,12 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
   }, [useExistingArticle]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newTitle = e.target.value;
+    const newTitle = e.target.value.trim(); // Nettoyer le titre
     
+    if (!newTitle) {
+      toast.error(tInvoicing('quotation.errors.title_required'));
+      return;
+    }
     if (!isExistingArticleSelected && newTitle) {
       const isDuplicate = existingEntries.some(entry => {
         const entryTitle = entry.article?.title ?? (entry as any)?.title;
@@ -89,27 +92,36 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
         return;
       }
     }
+
     const currentArticle = article?.article || {
       id: 0,
       title: '',
       description: '',
       reference: '',
-      quantityInStock: 1, // Valeur par défaut à 1 au lieu de 0
+      quantityInStock: article.quantity || 1,
       status: 'draft',
       version: 0,
-      unitPrice: article.unit_price || 0, // Utilise le prix unitaire saisi
+      unitPrice: article.unit_price || 0,
       notes: '',
       isDeletionRestricted: false
     };
   
+    const updatedArticle = {
+      ...currentArticle,
+      title: newTitle,
+      // Si c'est un nouvel article, on conserve la quantité et le prix unitaire
+      quantityInStock: article.quantity || 1,
+      unitPrice: article.unit_price || 0
+    };
+
+    // Si c'est un nouvel article, on l'ajoute à la liste des articles
+    if (!isExistingArticleSelected && newTitle && !articles.some(a => a.title === newTitle)) {
+      setArticles(prev => [...prev, updatedArticle]);
+    }
+  
     onChange({
       ...article,
-      article: {
-        ...currentArticle,
-      title: newTitle,
-        unitPrice: article.unit_price || 0, // Maintient le prix unitaire
-        quantityInStock: article.quantity || 1 // Maintient la quantité
-      },
+      article: updatedArticle,
       quantity: article.quantity || 1,
       orderedQuantity: article.orderedQuantity || 0,
       originalStock: article.originalStock || 0,
@@ -117,18 +129,87 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
     });
   };
 
+  const validateArticleReference = async (reference: string): Promise<boolean> => {
+    if (!reference) {
+        setFormError(null);
+        return true;
+    }
+
+    // 1. Vérification des doublons dans les entrées existantes (non-bloquant)
+    const isDuplicateInEntries = existingEntries.some(entry => {
+        if (entry.id === article.id) return false;
+        const entryReference = entry.article?.reference ?? (entry as any)?.reference;
+        return entryReference?.toLowerCase() === reference.toLowerCase();
+    });
+
+    if (isDuplicateInEntries) {
+        setFormError(tInvoicing('quotation.errors.duplicate_reference'));
+        return false;
+    }
+
+    // 2. Vérification asynchrone dans le catalogue (non-bloquant)
+    try {
+        const existingArticle = await api.article.findOneByReference(reference);
+        if (existingArticle) {
+            setFormError(tInvoicing('quotation.errors.reference_exists'));
+            return false;
+        }
+    } catch (error) {
+        console.error('Error checking article reference:', error);
+        // En cas d'erreur, on ne bloque pas
+    }
+
+    setFormError(null);
+    return true;
+};
+  const handleReferenceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newReference = e.target.value;
+    
+    // Mettre à jour immédiatement la référence dans l'état local
+    const updatedArticle = {
+        ...article,
+        article: {
+            ...(article.article || {
+                id: 0,
+                title: '',
+                description: '',
+                reference: '',
+                quantityInStock: 1,
+                status: 'draft',
+                version: 0,
+                unitPrice: article.unit_price || 0,
+                notes: '',
+                isDeletionRestricted: false
+            }),
+            reference: newReference
+        },
+        reference: newReference
+    };
+
+    // Mettre à jour l'état immédiatement pour permettre l'édition
+    onChange(updatedArticle);
+
+    // Effectuer la validation en arrière-plan
+    validateArticleReference(newReference).then(isValid => {
+        if (!isValid) {
+            // Si invalide, on pourrait éventuellement réinitialiser à l'ancienne valeur
+            // Mais ici on laisse l'utilisateur corriger
+        }
+    });
+};
+
   const handleSelectArticle = async (value: string) => {
     const selectedArticle = articles.find((art) => art.id === parseInt(value));
     if (selectedArticle) {
       try {
-        // Vérifier si un article avec le même titre existe déjà dans la liste
-        const isDuplicate = existingEntries.some(entry => {
-          const entryTitle = entry.article?.title ?? (entry as any)?.title;
-          return entryTitle?.toLowerCase() === selectedArticle.title?.toLowerCase();
+        // Vérifier si la référence existe déjà
+        const isReferenceDuplicate = existingEntries.some(entry => {
+          const entryReference = entry.article?.reference ?? (entry as any)?.reference;
+          return entryReference?.toLowerCase() === selectedArticle.reference?.toLowerCase();
         });
   
-        if (isDuplicate) {
-          toast.error(tInvoicing('quotation.errors.article_already_exists'));
+        if (isReferenceDuplicate) {
+          toast.error(tInvoicing('quotation.errors.reference_exists'));
           return;
         }
   
@@ -352,30 +433,56 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
     <div className={cn('flex flex-row items-center gap-6 h-full', className)}>
       <div className="w-9/12">
         <div className="flex flex-row gap-2 my-1">
-          {/* Title */}
+          {/* Title and Reference Section */}
           <div className="w-3/5">
-            <Label className="mx-1">{tInvoicing('article.attributes.title')}</Label>
-            {edit ? (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="use-existing-article"
-                    checked={useExistingArticle}
-                    onCheckedChange={handleUseExistingArticleChange}
-                  />
-                  <Label htmlFor="use-existing-article">
-                    {tInvoicing('Article existant')}
-                  </Label>
-                </div>
+            <div className="flex flex-col gap-2">
+              {/* Article Type Selection */}
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="use-existing-article"
+                  checked={useExistingArticle}
+                  onCheckedChange={handleUseExistingArticleChange}
+                />
+                <Label htmlFor="use-existing-article">
+                  {tInvoicing('Article existant')}
+                </Label>
+              </div>
+  
+              {/* Reference Field */}
+              {/* Reference Field */}
+              <div className="flex flex-col gap-1">
+  <Label className="mx-1">{tInvoicing('reference')}</Label>
+  {useExistingArticle ? (
+    <UneditableInput 
+      value={article.reference || article.article?.reference || tInvoicing('no_reference')} 
+    />
+  ) : (
+    <div>
+      <Input
+        placeholder="REF-123"
+        value={article.reference || article.article?.reference || ''}
+        onChange={handleReferenceChange}
+        className={formError ? 'border-red-500' : ''}
+      />
+      {formError && (
+        <span className="text-red-500 text-xs mt-1">{formError}</span>
+      )}
+    </div>
+  )}
+</div>
+  
+              {/* Title Field */}
+              <div className="flex flex-col gap-1">
+                <Label className="mx-1">{tInvoicing('title')}</Label>
                 {useExistingArticle ? (
                   <Select onValueChange={handleSelectArticle}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Sélectionnez un article" />
+                      <SelectValue placeholder={tInvoicing('select_placeholder')} />
                     </SelectTrigger>
                     <SelectContent>
                       <div className="p-2">
                         <Input
-                          placeholder="Rechercher un article..."
+                          placeholder={tInvoicing('search_placeholder')}
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
                         />
@@ -383,13 +490,13 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
                       
                       {loading ? (
                         <SelectItem value="loading" disabled>
-                          Chargement...
+                          {tInvoicing('common.loading')}
                         </SelectItem>
                       ) : articles.length > 0 ? (
                         articles
-                          .filter(article => 
-                            article?.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            (article.reference && article.reference.toLowerCase().includes(searchQuery.toLowerCase()))
+                          .filter(art => 
+                            art?.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            (art.reference && art.reference.toLowerCase().includes(searchQuery.toLowerCase()))
                           )
                           .map((art) => (
                             <SelectItem 
@@ -397,48 +504,58 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
                               value={art.id.toString()}
                               disabled={art.quantityInStock <= 0}
                             >
-                              {art.title} {art.reference ? `(${art.reference})` : ''}
-                              {art.quantityInStock <= 0 && ` (${tInvoicing('quotation.errors.out_of_stock')})`}
+                              <div className="flex flex-col">
+                                <span>{art.title}</span>
+                                {art.reference && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {art.reference}
+                                  </span>
+                                )}
+                                {art.quantityInStock <= 0 && (
+                                  <span className="text-xs text-red-500">
+                                    {tInvoicing('quotation.errors.out_of_stock')}
+                                  </span>
+                                )}
+                              </div>
                             </SelectItem>
                           ))
                       ) : (
                         <SelectItem value="no-articles" disabled>
-                          Aucun article disponible
+                          {tInvoicing('article.no_articles')}
                         </SelectItem>
                       )}
                     </SelectContent>
                   </Select>
                 ) : (
                   <Input
-                    placeholder="Saisissez un titre"
-                    value={article.article?.title}
+                    placeholder={tInvoicing('title_placeholder')}
+                    value={article.article?.title || ''}
                     onChange={handleTitleChange}
-                    disabled={isExistingArticleSelected}
                   />
                 )}
               </div>
-            ) : (
-              <UneditableInput value={article.article?.title} />
-            )}
+            </div>
           </div>
-          {/* Quantity */}
+  
+          {/* Quantity Section */}
           <div className="w-1/5">
             <Label className="mx-1">{tInvoicing('article.attributes.quantity')}</Label>
             {edit ? (
               <div className="flex flex-col">
                 <Input
-  type="number"
-  placeholder="0"
-  value={article.quantity}
-  onChange={handleQuantityChange}
-  min={1}
-  max={isExistingArticleSelected ? article.originalStock : undefined}
-/>
+                  type="number"
+                  placeholder="0"
+                  value={article.quantity || ''}
+                  onChange={handleQuantityChange}
+                  min={1}
+                  max={isExistingArticleSelected ? article.originalStock : undefined}
+                  className={quantityError ? 'border-red-500' : ''}
+                />
                 {quantityError && (
                   <span className="text-red-500 text-xs mt-1">{quantityError}</span>
                 )}
                 {isExistingArticleSelected && article.originalStock !== undefined && (
-                  <div className="text-xs text-gray-500 mt-1 space-y-1">
+                  <div className="text-xs text-muted-foreground mt-1 space-y-1">
                     <div>
                       {tInvoicing('original_stock')}: {article.originalStock}
                     </div>
@@ -452,10 +569,11 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
                 )}
               </div>
             ) : (
-              <UneditableInput value={article.quantity} />
+              <UneditableInput value={article.quantity?.toString() || '0'} />
             )}
           </div>
-          {/* Price */}
+  
+          {/* Price Section */}
           <div className="w-1/5">
             <Label className="mx-1">{tInvoicing('article.attributes.unit_price')}</Label>
             <div className="flex items-center gap-2">
@@ -463,51 +581,52 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
                 <Input
                   type="number"
                   placeholder="0"
-                  value={article.unit_price}
+                  value={article.unit_price || ''}
                   onChange={handleUnitPriceChange}
                   disabled={isExistingArticleSelected}
                 />
               ) : (
-                <UneditableInput value={article.unit_price} />
+                <UneditableInput value={article.unit_price?.toString() || '0'} />
               )}
-              <Label className="font-bold mx-1">{currency?.symbol}</Label>
+              <Label className="font-bold">{currency?.symbol}</Label>
             </div>
           </div>
         </div>
-        <div>
-          {showDescription && (
-            <div>
-              {edit ? (
+  
+        {/* Description Section */}
+        {showDescription && (
+          <div className="mt-2">
+            {edit ? (
+              <>
+                <Label className="mx-1">{tInvoicing('article.attributes.description')}</Label>
+                <Textarea
+                  placeholder={tInvoicing('description_placeholder')}
+                  className="resize-none"
+                  value={article.article?.description || ''}
+                  onChange={handleDescriptionChange}
+                  rows={3}
+                  disabled={isExistingArticleSelected}
+                />
+              </>
+            ) : (
+              article.article?.description && (
                 <>
                   <Label className="mx-1">{tInvoicing('article.attributes.description')}</Label>
                   <Textarea
-                    placeholder="Description"
+                    disabled
+                    value={article.article.description}
                     className="resize-none"
-                    value={article.article?.description}
-                    onChange={handleDescriptionChange}
-                    rows={3}
-                    disabled={isExistingArticleSelected}
+                    rows={3 + (article?.articleExpensQuotationEntryTaxes?.length || 0)}
                   />
                 </>
-              ) : (
-                article.article?.description && (
-                  <>
-                    <Label className="mx-1">{tInvoicing('article.attributes.description')}</Label>
-                    <Textarea
-                      disabled
-                      value={article.article?.description}
-                      className="resize-none"
-                      rows={3 + (article?.articleExpensQuotationEntryTaxes?.length || 0)}
-                    />
-                  </>
-                )
-              )}
-            </div>
-          )}
-        </div>
+              )
+            )}
+          </div>
+        )}
       </div>
+  
+      {/* Taxes and Discount Section */}
       <div className="w-3/12 flex flex-col h-full">
-        {/* Taxes */}
         <div className="my-auto">
           <Label className="block my-3">{tInvoicing('article.attributes.taxes')}</Label>
           <ExpenseInvoiceTaxEntries
@@ -521,59 +640,56 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
             edit={edit}
           />
         </div>
-
-        {/* Discount */}
+  
         <div className="my-auto py-5">
           <Label className="mx-1">{tInvoicing('quotation.attributes.discount')}</Label>
           <div className="flex items-center gap-2">
             {edit ? (
-              <Input
-                className="w-1/2"
-                type="number"
-                placeholder="0"
-                value={article.discount}
-                onChange={handleDiscountChange}
-              />
+              <>
+                <Input
+                  className="w-1/2"
+                  type="number"
+                  placeholder="0"
+                  value={article.discount || ''}
+                  onChange={handleDiscountChange}
+                />
+                <Select
+                  onValueChange={handleDiscountTypeChange}
+                  value={article.discount_type || DISCOUNT_TYPE.AMOUNT}
+                >
+                  <SelectTrigger className="w-1/2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={DISCOUNT_TYPE.PERCENTAGE}>%</SelectItem>
+                    <SelectItem value={DISCOUNT_TYPE.AMOUNT}>{currency?.symbol || '$'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </>
             ) : (
-              <UneditableInput className="w-1/2" value={article.discount || '0'} />
-            )}
-            {edit ? (
-              <Select
-                onValueChange={handleDiscountTypeChange}
-                defaultValue={
-                  article.discount_type === DISCOUNT_TYPE.PERCENTAGE ? 'PERCENTAGE' : 'AMOUNT'
-                }>
-                <SelectTrigger className="w-1/2">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PERCENTAGE">%</SelectItem>
-                  <SelectItem value="AMOUNT">{currency?.symbol || '$'}</SelectItem>
-                </SelectContent>
-              </Select>
-            ) : (
-              <UneditableInput
-                className="w-1/2 font-bold mx-1"
-                value={
-                  article.discount_type === DISCOUNT_TYPE.PERCENTAGE ? '%' : currency?.symbol || '$'
-                }
-              />
+              <>
+                <UneditableInput className="w-1/2" value={article.discount?.toString() || '0'} />
+                <UneditableInput
+                  className="w-1/2 font-bold"
+                  value={article.discount_type === DISCOUNT_TYPE.PERCENTAGE ? '%' : currency?.symbol || '$'}
+                />
+              </>
             )}
           </div>
         </div>
       </div>
-
-      {/* Total */}
+  
+      {/* Totals Section */}
       <div className="w-2/12 text-center flex flex-col justify-between h-full gap-12 mx-4">
         <div className="flex flex-col gap-2 my-auto">
-          <Label className="font-bold mx-1">{tInvoicing('article.attributes.tax_excluded')}</Label>
-          <Label>
+          <Label className="font-bold">{tInvoicing('article.attributes.tax_excluded')}</Label>
+          <Label className="text-lg">
             {article?.subTotal?.toFixed(digitAfterComma)} {currencySymbol}
           </Label>
         </div>
         <div className="flex flex-col gap-2 my-auto">
-          <Label className="font-bold mx-1">{tInvoicing('article.attributes.tax_included')}</Label>
-          <Label>
+          <Label className="font-bold">{tInvoicing('article.attributes.tax_included')}</Label>
+          <Label className="text-lg">
             {article?.total?.toFixed(digitAfterComma)} {currencySymbol}
           </Label>
         </div>

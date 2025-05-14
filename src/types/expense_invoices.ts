@@ -34,6 +34,7 @@ export interface ExpenseArticleInvoiceEntry extends DatabaseEntity {
   expenseInvoiceId?: number;
   article?: Article;
   articleId?: number;
+  reference?: string; // Ajout du champ reference
   unit_price?: number;
   quantity?: number;
   discount?: number;
@@ -55,8 +56,10 @@ export interface ExpenseCreateArticleInvoiceEntry
     | 'deletedAt'
     | 'isDeletionRestricted'
     | 'expenseArticleInvoiceEntryTaxes'
+    | 'reference' // Exclu de l'Omit si vous voulez le rendre obligatoire
   > {
   taxes?: number[];
+  reference?: string; // Devenu obligatoire
 }
 
 export interface ExpenseInvoiceMetaData extends DatabaseEntity {

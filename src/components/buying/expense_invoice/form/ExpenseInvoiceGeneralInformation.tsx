@@ -233,12 +233,27 @@ export const ExpenseInvoiceGeneralInformation = ({
           "w-full h-8",
           (!invoiceManager.sequentialNumbr || 
           (invoiceManager.sequentialNumbr && 
-          !validateSequentialNumber(invoiceManager.sequentialNumbr))) && 
+          (!validateSequentialNumber(invoiceManager.sequentialNumbr))) && 
           "border-red-500 focus-visible:ring-red-500"
-        )}
+        ))}
         placeholder="Format: INV-1234"
         value={invoiceManager.sequentialNumbr || ''}
-        onChange={(e) => invoiceManager.set('sequentialNumbr', e.target.value)}
+        onChange={async (e) => {
+          const value = e.target.value;
+          invoiceManager.set('sequentialNumbr', value);
+          
+          // Vérifier si le numéro existe seulement quand le format est valide
+          if (validateSequentialNumber(value)) {
+            try {
+              const { exists } = await api.expense_invoice.checkSequentialNumber(value);
+              if (exists) {
+                toast.error(tInvoicing('invoice.sequential_number_exists'));
+              }
+            } catch (error) {
+              console.error("Error checking sequential number:", error);
+            }
+          }
+        }}
         isPending={loading}
       />
       {!invoiceManager.sequentialNumbr ? (

@@ -76,82 +76,59 @@ const effectiveExchangeRate = Math.max(0.0001,
 );
 
 // Nouveau calcul du montant maximum autorisé
+// Remplacer le calcul de maxAllowedAmount par :
+// Remplacer le calcul du montant maximum par:
 const maxAllowedAmount = React.useMemo(() => {
   if (isSameCurrency) return remainingAmount.toUnit();
   
-  // Convert remaining amount in invoice currency to payment currency
-  const remainingInPaymentCurrency = remainingAmount.divide(effectiveExchangeRate);
-  return remainingInPaymentCurrency.toUnit();
+  // Conversion CORRECTE: (reste_en_€) / taux = montant_max_en_TND
+  // Exemple: 7.44€ / 0.30 = 24.80 TND
+  return remainingAmount.divide(effectiveExchangeRate).toUnit();
 }, [remainingAmount, isSameCurrency, effectiveExchangeRate]);
 
-// Nouveau calcul du montant restant
+// Remplacer le calcul du montant restant par:
 const currentRemainingAmount = React.useMemo(() => {
   if (!invoiceEntry.amount) return remainingAmount;
   
-  const amountInInvoiceCurrency = isSameCurrency
-    ? createDinero(invoiceEntry.amount)
-    : createDinero(invoiceEntry.amount).multiply(effectiveExchangeRate);
-
+  // Conversion CORRECTE: montant_TND × taux = montant_€
+  const amountInInvoiceCurrency = createDinero(invoiceEntry.amount).multiply(effectiveExchangeRate);
+  
   const newRemaining = remainingAmount.subtract(amountInInvoiceCurrency);
   
-  // Ajoutez une tolérance dynamique basée sur la précision de la devise
-  const toleranceAmount = Math.pow(10, -digitAfterComma);
-  const tolerance = createDinero(toleranceAmount);
-  
-  if (newRemaining.lessThanOrEqual(tolerance)) {
-    return createDinero(0);
-  }
-  
-  return newRemaining;
-}, [remainingAmount, invoiceEntry, isSameCurrency, effectiveExchangeRate, digitAfterComma]);
-// Nouvelle gestion de la saisie
+  // Appliquer la tolérance du backend (0.01€)
+  return newRemaining.lessThanOrEqual(createDinero(0.01)) 
+    ? createDinero(0) 
+    : newRemaining;
+}, [remainingAmount, invoiceEntry, effectiveExchangeRate]);
+
 // Replace the amount calculation logic with:
 const handleAmountPaidChange = (e: React.ChangeEvent<HTMLInputElement>) => {
   const rawValue = e.target.value;
-  
   if (rawValue === '') {
     onChange({ ...invoiceEntry, amount: undefined, originalAmount: undefined });
     return;
   }
-  
+
   const numberValue = parseFloat(rawValue);
   if (isNaN(numberValue)) return;
 
-  // Calcul avec arrondi précis
-  const roundedValue = parseFloat(numberValue.toFixed(digitAfterComma));
-  
-  // Calcul du montant maximum autorisé avec la même précision
-  const preciseMaxAllowed = parseFloat(maxAllowedAmount.toFixed(digitAfterComma));
-  
-  // Si le montant est égal au maximum autorisé (à la précision près)
-  if (Math.abs(roundedValue - preciseMaxAllowed) < Math.pow(10, -digitAfterComma)) {
-    // Forcer le paiement complet
+  if (isSameCurrency) {
+    // Même devise - pas de conversion nécessaire
     onChange({
       ...invoiceEntry,
-      amount: preciseMaxAllowed,
-      originalAmount: isSameCurrency 
-        ? preciseMaxAllowed 
-        : parseFloat((preciseMaxAllowed / effectiveExchangeRate).toFixed(digitAfterComma)),
-      exchangeRate: isSameCurrency ? 1 : effectiveExchangeRate
+      amount: numberValue,
+      originalAmount: numberValue,
+      exchangeRate: 1
     });
-    return;
+  } else {
+    // Devises différentes - conversion nécessaire
+    onChange({
+      ...invoiceEntry,
+      amount: numberValue,
+      originalAmount: numberValue, // Le montant saisi est dans la devise de paiement
+      exchangeRate: effectiveExchangeRate
+    });
   }
-
-  // Logique normale
-  const amountInInvoiceCurrency = isSameCurrency
-    ? createDinero(roundedValue)
-    : createDinero(roundedValue).multiply(effectiveExchangeRate);
-
-  const originalAmount = isSameCurrency
-    ? roundedValue
-    : parseFloat((roundedValue / effectiveExchangeRate).toFixed(digitAfterComma));
-
-  onChange({
-    ...invoiceEntry,
-    amount: roundedValue,
-    originalAmount,
-    exchangeRate: isSameCurrency ? 1 : effectiveExchangeRate
-  });
 };
 
   const handleExchangeRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {

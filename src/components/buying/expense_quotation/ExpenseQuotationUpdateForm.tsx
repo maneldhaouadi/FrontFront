@@ -210,69 +210,56 @@ export const ExpenseQuotationUpdateForm = ({ className, expensequotationId }: Ex
   // Update handler
   const onSubmit = async (status: EXPENSQUOTATION_STATUS) => {
     try {
-      // 1. Préparation des articles
-      const articlesDto: ExpenseArticleQuotationEntry[] = articleManager.getArticles()?.map((article) => ({
-        article: {
-          id: article?.article?.id ?? 0,
-          title: article?.article?.title || '',
-          description: article?.article?.description || '',
-          reference: article?.article?.reference || '', // Ajout de la référence obligatoire
-          quantityInStock: article?.article?.quantityInStock || 0,
-          status: article?.article?.status || 'draft', // Valeur par défaut
-          unitPrice: article?.article?.unitPrice || 0,// Ajout du prix unitaire,
-          version:article?.article?.version || 0
-        },
-        quantity: article?.quantity || 0,
-        unit_price: article?.unit_price || 0,
-        discount: article?.discount || 0,
-        discount_type: article?.discount_type === 'PERCENTAGE' ? DISCOUNT_TYPE.PERCENTAGE : DISCOUNT_TYPE.AMOUNT,
-        taxes: article?.articleExpensQuotationEntryTaxes?.map((entry) => entry?.tax?.id) || [],
-      }));
+      const articlesDto = articleManager.getArticles()?.map((article) => {
+        // Garantir que l'ID est toujours défini (0 si nouvel article)
+        const articleId = article?.article?.id ?? 0;
+        
+        const articleUpdateData = {
+            id: articleId, // <-- Maintenant toujours un nombre
+            title: article?.article?.title || '',
+            description: article?.article?.description || '',
+            reference: article?.article?.reference || article?.reference || '',
+            unitPrice: article?.unit_price || article?.article?.unitPrice || 0,
+            quantityInStock: article?.quantity || article?.article?.quantityInStock || 0,
+            status: article?.article?.status || 'draft',
+            version: article?.article?.version || 0
+        };
+    
+        return {
+            ...article,
+            article: articleUpdateData,
+            taxes: article?.articleExpensQuotationEntryTaxes?.map(t => t.tax?.id).filter(Boolean) as number[]
+        };
+    }) || [];
   
       // 2. Gestion du fichier PDF
       let pdfFileId = quotationManager.pdfFileId;
       if (quotationManager.pdfFile) {
-        console.log('Upload du nouveau fichier PDF...');
         const [uploadedPdfFileId] = await api.upload.uploadFiles([quotationManager.pdfFile]);
         pdfFileId = uploadedPdfFileId;
-        console.log('Nouveau PDF uploadé avec ID:', pdfFileId);
+        
+        if (quotationManager.pdfFileId && quotationManager.pdfFileId !== pdfFileId) {
+          await api.upload.delete(quotationManager.pdfFileId);
+        }
       }
   
-      // 3. Gestion des fichiers uploadés supplémentaires
+      // 3. Gestion des fichiers supplémentaires
       const additionalFiles = quotationManager.uploadedFiles
         .filter((u) => !u.upload)
         .map((u) => u.file);
   
-      console.log('Fichiers supplémentaires à uploader:', additionalFiles.length);
-      
       let uploadIds: number[] = [];
       if (additionalFiles.length > 0) {
         uploadIds = await api.upload.uploadFiles(additionalFiles);
-        console.log('Fichiers supplémentaires uploadés avec IDs:', uploadIds);
       }
   
-      // 4. Préparation des données d'upload pour le backend
-      const uploadsForBackend = [
-        // Fichiers existants (inclure l'ID pour identification)
-        ...quotationManager.uploadedFiles
-          .filter((u) => !!u.upload)
-          .map((u) => ({ 
-            id: u.upload.id, // Important pour les fichiers existants
-            uploadId: u.upload.id 
-          })),
-        // Nouveaux fichiers (seulement uploadId)
-        ...uploadIds.map((id) => ({ uploadId: id }))
-      ];
-  
-      console.log('Données uploads pour le backend:', uploadsForBackend);
-  
-      // 5. Construction de l'objet quotation complet
+      // 4. Construction de l'objet quotation
       const quotation: UpdateExpensQuotationDto = {
         id: quotationManager.id,
-        date: quotationManager.date?.toString(),
-        dueDate: quotationManager.dueDate?.toString(),
+        date: quotationManager.date?.toISOString().split('T')[0],
+        dueDate: quotationManager.dueDate?.toISOString().split('T')[0],
         sequentialNumbr: quotationManager.sequentialNumbr,
-        sequential: '',
+        sequential: quotationManager.sequentialNumbr,
         object: quotationManager.object,
         cabinetId: quotationManager.firm?.cabinetId,
         firmId: quotationManager.firm?.id,
@@ -284,9 +271,19 @@ export const ExpenseQuotationUpdateForm = ({ className, expensequotationId }: Ex
         notes: quotationManager.notes,
         articleQuotationEntries: articlesDto,
         discount: quotationManager.discount,
-        discount_type: quotationManager.discount_type === 'PERCENTAGE' ? DISCOUNT_TYPE.PERCENTAGE : DISCOUNT_TYPE.AMOUNT,
+        discount_type: quotationManager.discount_type === 'PERCENTAGE' 
+          ? DISCOUNT_TYPE.PERCENTAGE 
+          : DISCOUNT_TYPE.AMOUNT,
         pdfFileId,
-        uploads: uploadsForBackend,
+        uploads: [
+          ...(quotationManager.uploadedFiles
+            .filter((u) => u.upload?.id)
+            .map((u) => ({
+              id: u.upload.id,
+              uploadId: u.upload.id
+            })) || []),
+          ...uploadIds.map((uploadId) => ({ uploadId }))
+        ],
         expensequotationMetaData: {
           showArticleDescription: !controlManager.isArticleDescriptionHidden,
           hasBankingDetails: !controlManager.isBankAccountDetailsHidden,
@@ -294,24 +291,22 @@ export const ExpenseQuotationUpdateForm = ({ className, expensequotationId }: Ex
         },
       };
   
-      console.log('Données complètes du devis:', quotation);
-  
-      // 6. Validation avant envoi
+      // 5. Validation avant envoi
       const validation = api.expense_quotation.validate(quotation);
       if (validation.message) {
-        toast.error(validation.message, { position: validation.position || 'bottom-right' });
+        toast.error(validation.message);
         return;
       }
   
-      // 7. Envoi au backend
-      console.log('Envoi des données au backend...');
+      // 6. Envoi au backend
       await updateQuotation({ 
         quotation, 
         files: additionalFiles 
       });
   
+      toast.success('Devis mis à jour avec succès');
     } catch (error) {
-    console.log("erreur d'ajout de fichier")
+      console.error("Erreur lors de la mise à jour:", error);
     }
   };
   // Component representation

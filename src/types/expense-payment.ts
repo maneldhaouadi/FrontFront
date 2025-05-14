@@ -32,7 +32,9 @@ export interface ExpensePaymentInvoiceEntry extends DatabaseEntity {
   originalAmount?: number;
   originalCurrencyId?: number;
   digitAfterComma?: number;
+  
 }
+
 
 export interface ExpensePayment extends DatabaseEntity {
   id?: number;

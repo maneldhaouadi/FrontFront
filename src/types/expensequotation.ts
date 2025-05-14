@@ -44,8 +44,9 @@ export interface ExpenseArticleQuotationEntry extends DatabaseEntity {
   articleExpensQuotationEntryTaxes?: ExpenseQuotationTaxEntry[];
   subTotal?: number;
   total?: number;
-  orderedQuantity?: number;     // ✅ Nouveau champ
-  originalStock?: number;       // ✅ Nouveau champ
+  orderedQuantity?: number;
+  originalStock?: number;
+  reference: string; // Champ obligatoire
 }
 
 export interface CreateExpensArticleQuotationEntry extends Omit<
@@ -60,7 +61,8 @@ export interface CreateExpensArticleQuotationEntry extends Omit<
   | 'isDeletionRestricted'
   | 'articleExpensQuotationEntryTaxes'
 > {
-  taxes?: number[];  // Tax IDs
+  taxes?: number[];
+  reference: string; // Ajout explicite car présent dans le DTO backend
 }
 
 export interface ExpenseQuotationUpload extends DatabaseEntity {
@@ -135,6 +137,7 @@ export interface UpdateExpensQuotationDto extends CreateExpensQuotationDto {
 export interface DuplicateExpensQuotationDto {
   id?: number;
   includeFiles?: boolean;
+  generateNewReferences?:boolean
 }
 
 export interface PagedExpensQuotation extends PagedResponse<ExpenseQuotation> {}

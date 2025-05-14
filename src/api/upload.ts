@@ -11,6 +11,24 @@ const findOne = async (id: number): Promise<Upload> => {
   return response.data;
 };
 
+const deleteFile = async (id: number): Promise<void> => {
+  try {
+    await axios.delete(`public/storage/${id}`);
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    throw new Error('Failed to delete file');
+  }
+};
+
+const deleteManyFiles = async (ids: number[]): Promise<void> => {
+  try {
+    await axios.delete(`public/storage`, { data: { ids } });
+  } catch (error) {
+    console.error('Error deleting files:', error);
+    throw new Error('Failed to delete files');
+  }
+};
+
 const uploadFile = async (file: File): Promise<{ id?: number; error?: string }> => {
   const formData = new FormData();
   formData.append('file', file); // Ajoute le fichier au FormData
@@ -99,5 +117,7 @@ export const upload = {
   uploadFiles,
   fetchBlobBySlug,
   fetchBlobById,
-  downloadFile
+  downloadFile,
+  delete: deleteFile,           // Méthode pour supprimer un seul fichier
+  deleteMany: deleteManyFiles   // Méthode pour supprimer plusieurs fichiers
 };

@@ -64,15 +64,18 @@ export const ExpenseQuotationGeneralInformation = ({
   
     setIsValidating(true);
     try {
-      const exists = await api.expense_quotation.checkSequentialNumberExists(value);
+      // Appel à l'API pour vérifier l'existence du numéro
+      const { exists } = await api.expense_quotation.checkSequentialNumber(value);
+      
       if (exists) {
         quotationManager.setError(
           'sequentialNumbr', 
-          tInvoicing('quotation.sequential_number_exists')
+          tInvoicing('ce numero sequentiel existe deja')
         );
         return false;
       }
       
+      // Si tout est OK, on efface les erreurs
       quotationManager.setError('sequentialNumbr', null);
       return true;
     } catch (error) {

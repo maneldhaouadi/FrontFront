@@ -36,8 +36,9 @@ import { ExpensePaymentInvoiceEntry } from '@/types/expense-payment';
 interface ExpensePaymentInvoiceManagementProps {
   className?: string;
   loading?: boolean;
-  mode?: 'CREATE' | 'EDIT' | 'INSPECT'; // Ajoutez 'INSPECT' ici
-  disabled?: boolean; // Ajoutez cette ligne
+  mode?: 'CREATE' | 'EDIT' | 'INSPECT';
+  disabled?: boolean;
+  initialInvoices?: ExpensePaymentInvoiceEntry[]; // Add this line
 }
 
 
@@ -46,6 +47,7 @@ export const ExpensePaymentInvoiceManagement: React.FC<ExpensePaymentInvoiceMana
   loading,
   mode = 'CREATE',
   disabled = false,
+  initialInvoices = [], // Add this with default value
 }) => {
   // All hooks called unconditionally at the top
   const { t: tInvoicing } = useTranslation('invoicing');
@@ -60,18 +62,20 @@ export const ExpensePaymentInvoiceManagement: React.FC<ExpensePaymentInvoiceMana
 
   // Memoized calculations
   const displayedInvoices = React.useMemo(() => {
-    // En mode inspect/update, affichez toutes les factures associées
-    return mode !== 'CREATE' 
-      ? invoiceManager.invoices 
-      : invoiceManager.invoices.filter(item => {
-          const total = item.invoice.expenseInvoice?.total || 0;
-          const paid = item.invoice.expenseInvoice?.amountPaid || 0;
-          const tax = item.invoice.expenseInvoice?.taxWithholdingAmount || 0;
-          return (total - paid - tax) > 0.01;
-        });
+    // En mode inspection/modification
+    if (mode !== 'CREATE') {
+      return invoiceManager.invoices;
+    }
+    
+    // En mode création seulement
+    return invoiceManager.invoices.filter(item => {
+      const total = item.invoice.expenseInvoice?.total || 0;
+      const paid = item.invoice.expenseInvoice?.amountPaid || 0;
+      return (total - paid) > 0.01;
+    });
   }, [invoiceManager.invoices, mode]);
 
-
+  
   const unpaidInvoices = React.useMemo(() => {
     return invoiceManager.invoices.filter(item => {
       const total = item.invoice.expenseInvoice?.total || 0;

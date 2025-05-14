@@ -330,6 +330,13 @@ const exportInvoicePdf = async (invoiceId: number, templateId?: number): Promise
 
 };
 
+const checkSequentialNumber = async (sequentialNumber: string): Promise<{ exists: boolean }> => {
+  const response = await axios.get<{ exists: boolean }>(
+    `public/expenseinvoice/check-sequential/${sequentialNumber}`
+  );
+  return response.data;
+};
+
 
 export const expense_invoice = {
   factory,
@@ -343,4 +350,5 @@ export const expense_invoice = {
   deletePdfFile,
   updateInvoiceStatusIfExpired,
   exportInvoicePdf,
+  checkSequentialNumber
 };

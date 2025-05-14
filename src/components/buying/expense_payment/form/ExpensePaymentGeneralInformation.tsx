@@ -113,7 +113,8 @@ export const ExpensePaymentGeneralInformation = ({
             numberOfMonths={1}
             className="w-full py-4 mt-1"
             isPending={loading}
-            disabled={disabled || loading}          />
+            disabled={disabled} // Désactivation du date picker
+          />
         </div>
       </div>
 
@@ -183,10 +184,10 @@ export const ExpensePaymentGeneralInformation = ({
                 paymentManager.set('currency', currency);
                 invoiceManager.init();
               }}
+              disabled={disabled || currencies.length == 1} // Désactivation du select
               defaultValue={
                 paymentManager?.currencyId ? paymentManager?.currencyId?.toString() : undefined
               }
-              disabled={disabled || loading}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder={tInvoicing('controls.currency_select_placeholder')} />

@@ -40,6 +40,7 @@ export const ExpensePaymentUpdateForm = ({ className, paymentId}: ExpensePayment
   const invoiceManager = useExpensePaymentInvoiceManager();
   const isInspectMode = router.query.mode === 'inspect'; // Ajoutez cette ligne
   const [invoicesLoaded, setInvoicesLoaded] = React.useState(false);
+  const [initialLoadComplete, setInitialLoadComplete] = React.useState(false);
 
   // Fetch payment data
   const {
@@ -88,8 +89,7 @@ export const ExpensePaymentUpdateForm = ({ className, paymentId}: ExpensePayment
     
     const setPaymentData = (data: Partial<ExpensePayment>) => {
       if (!data) return;
-    
-      // Payment infos
+      
       paymentManager.setPayment({
         ...data,
         firm: firms?.find((firm) => firm.id === data.firmId),
@@ -99,22 +99,25 @@ export const ExpensePaymentUpdateForm = ({ className, paymentId}: ExpensePayment
         convertionRate: data.convertionRate || 1,
       });
     
-      // Invoice infos with currency conversion
-      if (data?.invoices) {
+      if (!isInspectMode && data?.invoices) {
         const processedInvoices = data.invoices.map(invoice => {
           const invoiceCurrencyId = invoice?.expenseInvoice?.currency?.id;
           const paymentCurrencyId = data?.currencyId;
           const isSameCurrency = invoiceCurrencyId === paymentCurrencyId;
-          const exchangeRate = invoice?.exchangeRate || data?.convertionRate || 1;
           
+          // Calculer le montant restant à payer
+          const remainingAmount = (invoice.expenseInvoice?.total || 0) - 
+                               (invoice.expenseInvoice?.amountPaid || 0) -
+                               (invoice.expenseInvoice?.taxWithholdingAmount || 0);
+    
           return {
             ...invoice,
             amount: isSameCurrency 
-              ? invoice?.amount || 0
-              : (invoice?.originalAmount || invoice?.amount || 0) * exchangeRate,
-            originalAmount: invoice?.originalAmount || invoice?.amount || 0,
-            exchangeRate: isSameCurrency ? 1 : exchangeRate,
-            originalCurrencyId: invoiceCurrencyId
+              ? remainingAmount // Par défaut, proposer de payer le reste
+              : (invoice?.originalAmount || remainingAmount),
+            originalAmount: invoice?.originalAmount || remainingAmount,
+            exchangeRate: invoice?.exchangeRate || data?.convertionRate || 1,
+            originalCurrencyId: paymentCurrencyId
           };
         });
       
@@ -147,14 +150,52 @@ export const ExpensePaymentUpdateForm = ({ className, paymentId}: ExpensePayment
       },
       loading: fetching,
     });
+
+   React.useEffect(() => {
+  if (payment && payment.firmId && firms && !invoicesLoaded) {
+    setPaymentData(payment);
+    setInvoicesLoaded(true);
     
+    // Pré-remplir avec le montant restant à payer
+    if (!isInspectMode && payment.invoices && payment.invoices.length > 0) {
+      const updatedInvoices = payment.invoices.map(invoice => {
+        const remaining = (invoice.expenseInvoice?.total || 0) - 
+                        (invoice.expenseInvoice?.amountPaid || 0) -
+                        (invoice.expenseInvoice?.taxWithholdingAmount || 0);
+        
+        return {
+          ...invoice,
+          amount: remaining > 0 ? remaining : 0
+        };
+      });
+      
+      invoiceManager.setInvoices(
+        updatedInvoices,
+        payment.currency || undefined,
+        payment.convertionRate || 1,
+        'EDIT'
+      );
+    }
+  }
+}, [payment, firms, isInspectMode]);
     // Ajoutez un useEffect pour forcer le rechargement des factures lorsque le payment change
     React.useEffect(() => {
       if (payment && payment.firmId && firms) {
-        // Charge les factures automatiquement quand le payment ou les firms changent
+        // Charge les données du paiement
         setPaymentData(payment);
+        
+        // Charge explicitement les factures associées seulement si nécessaire
+        if (!isInspectMode && payment.invoices && payment.invoices.length > 0) {
+          invoiceManager.setInvoices(
+            payment.invoices,
+            payment.currency || undefined,
+            payment.convertionRate || 1,
+            'EDIT'
+          );
+        }
       }
-    }, [payment, firms]);
+    }, [payment, firms, isInspectMode]);
+
 
   const currency = React.useMemo(() => {
     return currencies?.find((c) => c.id === paymentManager.currencyId);
@@ -172,83 +213,187 @@ export const ExpensePaymentUpdateForm = ({ className, paymentId}: ExpensePayment
       toast.error(message);
     },
   });
+  // Ajoutez cette fonction dans votre composant ou dans un fichier utilitaire
+const validatePayment = (
+  payment: Partial<ExpensePayment>,
+  used: number,
+  paid: number,
+  invoices: Array<{
+    amount: number;
+    expenseInvoice: {
+      currencyId: number;
+      total: number;
+      amountPaid: number;
+    };
+    exchangeRate?: number;
+  }> = [],
+  paymentCurrencyId?: number,
+  allCurrencies: Array<{id: number, code: string}> = []
+): {message: string, position?: string} => {
+  // Validations de base
+  if (!payment.date) return { message: 'La date doit être définie' };
+  if (!payment?.amount || payment?.amount <= 0)
+    return { message: 'Le montant doit être supérieur à 0' };
+  if (payment?.fee == null || payment?.fee < 0)
+    return { message: 'Les frais doivent être supérieurs ou égaux à 0' };
+  if (payment?.fee > payment?.amount) 
+    return { message: 'Les frais doivent être inférieurs au montant total' };
 
-  const onSubmit = () => {
-    if (isInspectMode) return; // Empêche la soumission en mode inspection
+  // Validation des montants des factures
+  if (invoices.length > 0) {
+    for (const invoiceEntry of invoices) {
+      const invoice = invoiceEntry.expenseInvoice;
+      const remainingAmount = invoice.total - (invoice.amountPaid || 0);
+      
+      // Trouver les devises
+      const invoiceCurrency = allCurrencies.find(c => c.id === invoice.currencyId);
+      const paymentCurrency = paymentCurrencyId 
+        ? allCurrencies.find(c => c.id === paymentCurrencyId)
+        : null;
 
-    const invoices = invoiceManager
+      // Si devises différentes, vérifier le taux de change
+      if (paymentCurrencyId && invoice.currencyId !== paymentCurrencyId) {
+        if (!invoiceEntry.exchangeRate || invoiceEntry.exchangeRate <= 0) {
+          return { 
+            message: `Un taux de change valide est requis pour la facture en ${invoiceCurrency?.code || 'devise inconnue'}`
+          };
+        }
+
+        const maxAllowed = remainingAmount / invoiceEntry.exchangeRate;
+        if (invoiceEntry.amount > maxAllowed + 0.01) {
+          return {
+            message: `Le montant pour la facture (${invoiceEntry.amount} ${paymentCurrency?.code || ''}) ` +
+                     `dépasse le maximum autorisé (${maxAllowed.toFixed(2)} ${paymentCurrency?.code || ''}) ` +
+                     `pour un reste de ${remainingAmount} ${invoiceCurrency?.code || ''} ` +
+                     `au taux de ${invoiceEntry.exchangeRate}`
+          };
+        }
+      } else {
+        // Même devise - validation simple
+        if (invoiceEntry.amount > remainingAmount + 0.01) {
+          return {
+            message: `Le montant pour la facture (${invoiceEntry.amount}) ` +
+                     `dépasse le reste à payer (${remainingAmount})`
+          };
+        }
+      }
+    }
+  }
+
+  // Validation du montant total
+  if (Math.abs(paid - used) > 0.01) {
+    return { 
+      message: `Le montant total (${paid}) doit correspondre à la somme des factures (${used})`,
+      position: 'bottom-right'
+    };
+  }
+
+  return { message: '', position: 'bottom-right' };
+};
+
+const onSubmit = async () => {
+  if (isInspectMode) return;
+
+  try {
+    // 1. Préparer les données des factures
+    const invoiceEntries = invoiceManager
       .getInvoices()
       .map((invoice: ExpensePaymentInvoiceEntry) => {
-        const invoiceCurrencyId = invoice?.expenseInvoice?.currency?.id;
+        // Validation des données de base
+        if (!invoice?.expenseInvoice?.id) {
+          throw new Error('Facture invalide: ID manquant');
+        }
+
+        const invoiceCurrencyId = invoice.expenseInvoice.currency?.id;
         const paymentCurrencyId = paymentManager.currencyId;
-        const shouldConvert = invoiceCurrencyId && paymentCurrencyId && 
-                            invoiceCurrencyId !== paymentCurrencyId;
         
-        const exchangeRate = invoice.exchangeRate || paymentManager.convertionRate;
-        
-        if (shouldConvert && (!exchangeRate || exchangeRate <= 0)) {
-            throw new Error(`Taux de change manquant ou invalide pour la conversion ${paymentCurrencyId}→${invoiceCurrencyId}`);
+        if (!paymentCurrencyId) {
+          throw new Error('La devise du paiement doit être définie');
+        }
+
+        const isSameCurrency = invoiceCurrencyId === paymentCurrencyId;
+
+        // Calcul des montants avec protection contre les valeurs nulles
+        const invoiceTotal = Number(invoice.expenseInvoice.total) || 0;
+        const amountPaid = Number(invoice.expenseInvoice.amountPaid) || 0;
+        const taxWithholding = Number(invoice.expenseInvoice.taxWithholdingAmount) || 0;
+        const remainingAmount = Math.max(0, invoiceTotal - amountPaid - taxWithholding);
+
+        // Détermination du montant à payer
+        const amountToPay = Math.max(
+          0,
+          Math.min(
+            Number(invoice.amount) || Number(invoice.originalAmount) || remainingAmount,
+            remainingAmount
+          )
+        );
+
+        // Debug log
+        console.log('Payment calculation:', {
+          invoiceId: invoice.expenseInvoice.id,
+          invoiceAmount: invoice.amount,
+          originalAmount: invoice.originalAmount,
+          remainingAmount,
+          amountToPay
+        });
+
+        if (amountToPay <= 0) {
+          throw new Error(`Veuillez saisir un montant valide pour la facture ${invoice.expenseInvoice.id || invoice.expenseInvoice.id}`);
         }
 
         return {
-          expenseInvoiceId: invoice?.expenseInvoice?.id,
-          amount: shouldConvert 
-            ? (invoice.amount || 0) * exchangeRate
-            : (invoice.amount || 0),
-          exchangeRate,
-          originalAmount: invoice.amount || 0,
-          originalCurrencyId: paymentCurrencyId
+          expenseInvoiceId: invoice.expenseInvoice.id,
+          amount: isSameCurrency 
+            ? amountToPay 
+            : (Number(invoice.originalAmount) || amountToPay) * (Number(invoice.exchangeRate) || 1),
+          originalAmount: isSameCurrency ? amountToPay : (Number(invoice.originalAmount) || amountToPay),
+          exchangeRate: isSameCurrency ? undefined : (Number(invoice.exchangeRate) || 1),
+          originalCurrencyId: isSameCurrency ? undefined : paymentCurrencyId,
+          digitAfterComma: invoice.expenseInvoice.currency?.digitAfterComma || 2
         };
-      });
+      })
+      .filter(entry => entry.amount > 0 && entry.expenseInvoiceId);
 
-    const used = invoiceManager.getInvoices().reduce((sum, invoice) => {
-      const invoiceCurrencyId = invoice?.expenseInvoice?.currency?.id;
-      const paymentCurrencyId = paymentManager.currencyId;
-      const shouldConvert = invoiceCurrencyId && paymentCurrencyId && 
-                          invoiceCurrencyId !== paymentCurrencyId;
-      const amount = invoice?.amount || 0;
-      
-      return sum + (shouldConvert 
-        ? amount * (paymentManager.convertionRate || 1)
-        : amount);
-    }, 0);
+    if (invoiceEntries.length === 0) {
+      throw new Error('Aucune facture valide avec montant positif');
+    }
 
-    const paidAmount = (paymentManager.amount || 0) + (paymentManager.fee || 0);
-    const paid = dinero({
-      amount: createDineroAmountFromFloatWithDynamicCurrency(
-        paidAmount,
-        currency?.digitAfterComma || 3
-      ),
-      precision: currency?.digitAfterComma || 3,
-    }).toUnit();
+    // 2. Calcul du montant total
+    const totalAmount = invoiceEntries.reduce((sum, entry) => sum + (entry.originalAmount || entry.amount), 0);
 
+    // 3. Préparation des données du paiement
     const paymentData: ExpenseUpdatePaymentDto = {
       id: paymentManager.id,
       sequential: paymentManager.sequentialNumbr || '',
-      amount: paymentManager.amount || 0,
-      fee: paymentManager.fee || 0,
-      convertionRate: paymentManager.convertionRate || 1,
-      date: paymentManager.date?.toString(),
+      sequentialNumbr: paymentManager.sequentialNumbr || '',
+      amount: totalAmount,
+      fee: Number(paymentManager.fee) || 0,
+      convertionRate: Number(paymentManager.convertionRate) || 1,
+      date: paymentManager.date?.toISOString().split('T')[0],
       mode: paymentManager.mode,
-      notes: paymentManager.notes,
+      notes: paymentManager.notes || '',
       currencyId: paymentManager.currencyId,
       firmId: paymentManager.firmId,
-      sequentialNumbr: paymentManager.sequentialNumbr,
-      invoices: invoices.filter(inv => inv.expenseInvoiceId),
-      uploads: paymentManager.uploadedFiles?.filter((u) => !!u.upload)?.map((u) => u.upload) || [],
+      invoices: invoiceEntries,
     };
 
-    const validation = api.expensepayment.validate(paymentData, used, paid);
-    if (validation.message) {
-      toast.error(validation.message);
-    } else {
-      updatePayment({
-        payment: paymentData,
-        files: paymentManager.uploadedFiles?.filter((u) => !u.upload)?.map((u) => u.file) || [],
-      });
-    }
-  };
+    // 4. Envoi de la requête
+    await updatePayment({
+      payment: paymentData,
+    });
 
+    toast.success('Paiement mis à jour avec succès');
+    router.push('/buying/expense_payments');
+
+  } catch (error) {
+    console.error('Erreur de mise à jour:', {
+      error,
+      invoices: invoiceManager.getInvoices(),
+      payment: paymentManager.getPayment()
+    });
+    toast.error(error instanceof Error ? error.message : 'Erreur lors de la mise à jour');
+  }
+};
   // Dans ExpensePaymentUpdateForm
   return (
     <div className={cn('overflow-auto px-10 py-6', className)}>
@@ -274,6 +419,7 @@ export const ExpensePaymentUpdateForm = ({ className, paymentId}: ExpensePayment
                   loading={fetching}
                   disabled={isInspectMode || isDisabled}
                   mode={isInspectMode ? 'INSPECT' : 'EDIT'}
+                  initialInvoices={isInspectMode ? [] : payment?.invoices || []}
                 />
                 )}
                 <div className="flex gap-10 mt-5">

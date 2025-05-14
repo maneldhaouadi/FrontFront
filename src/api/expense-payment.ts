@@ -5,22 +5,34 @@ import axios from './axios';
 import { upload } from './upload';
 import { api } from '.';
 import { EXPENSE_PAYMENT_FILTER_ATTRIBUTES } from '@/constants/expense-payment-filter-attributes';
-import { ExpenseCreatePaymentDto, ExpensePagedPayment, ExpensePayment, ExpensePaymentUploadedFile, ExpenseUpdatePaymentDto } from '@/types/expense-payment';
+import { ExpenseCreatePaymentDto, ExpensePagedPayment, ExpensePayment, ExpensePaymentInvoiceEntry, ExpensePaymentUploadedFile, ExpenseUpdatePaymentDto } from '@/types/expense-payment';
 
 const findOne = async (id: number) => {
-  const relations = [
-    'invoices',
-    'invoices.expenseInvoice', 
-    'invoices.expenseInvoice.currency',
-    'invoices.expenseInvoice.firm'
-  ].join(',');
-  
   const response = await axios.get<ExpensePayment>(
-    `public/expense-payment/${id}?join=${relations}`
+    `public/expense-payment/${id}`,
+    {
+      params: {
+        join: [
+          'invoices',
+          'invoices.expenseInvoice',
+          'invoices.expenseInvoice.currency',
+          'invoices.expenseInvoice.firm',
+          'currency'
+        ].join(','),
+        reload: true // Force le rechargement des relations
+      }
+    }
   );
-  
+
+  if (!response.data.invoices) {
+    console.warn('API returned payment without invoices array');
+    response.data.invoices = []; // Garantit que invoices existe
+  }
+
   return response.data;
 };
+
+
 const findPaginated = async (
   page: number = 1,
   size: number = 5,
@@ -237,5 +249,10 @@ const validate = (
   return { message: '', position: 'bottom-right' };
 };
 
-export const expensepayment = { findOne, findPaginated, create, update, remove, validate,deletePdfFile,  downloadPdf // Ajoutez cette ligne
+const getInvoicesByPaymentId = async (paymentId: number): Promise<ExpensePaymentInvoiceEntry[]> => {
+  const response = await axios.get(`public/expense-payment/${paymentId}/invoices`);
+  return response.data;
+};
+
+export const expensepayment = { findOne, findPaginated, create, update, remove, validate,deletePdfFile,  downloadPdf,getInvoicesByPaymentId // Ajoutez cette ligne
 };

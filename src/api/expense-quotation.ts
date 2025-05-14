@@ -272,47 +272,36 @@ const download = async (id: number, template: string): Promise<any> => {
 };
 
 const duplicate = async (
-  duplicateQuotationDto: DuplicateExpensQuotationDto
+  duplicateQuotationDto: { id: number; includeFiles: boolean }
 ): Promise<ExpenseQuotation> => {
   try {
-    console.log("Duplicating with options:", {
-      id: duplicateQuotationDto.id,
-      includeFiles: duplicateQuotationDto.includeFiles
-    });
-
     const response = await axios.post<ExpenseQuotation>(
-      '/public/expensquotation/duplicate',
-      duplicateQuotationDto,
+      `public/expensquotation/duplicate`,
+      {
+        id: duplicateQuotationDto.id,
+        includeFiles: duplicateQuotationDto.includeFiles
+        // Le backend gère automatiquement les nouvelles références
+      },
       {
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       }
     );
 
-    // Vérification stricte du résultat
     if (response.status === 200 || response.status === 201) {
-      console.log("Duplication successful. Result:", {
-        newId: response.data.id,
-        hasPdf: !!response.data.pdfFileId,
-        expectedPdf: duplicateQuotationDto.includeFiles
-      });
-
-      if (!duplicateQuotationDto.includeFiles && response.data.pdfFileId) {
-        console.warn("WARNING: PDF was duplicated but includeFiles was false!");
-      }
-
+      // Vérification des nouvelles références
+      const newReferences = response.data.expensearticleQuotationEntries?.map(e => e.reference);
+      console.log("Nouvelles références générées:", newReferences);
       return response.data;
     }
     throw new Error(`HTTP ${response.status}`);
-    
   } catch (error) {
-    console.error('Duplication error:', {
-    });
+    console.error('Échec de la duplication:', error);
     throw error;
   }
 };
-
 const update = async (quotation: UpdateExpensQuotationDto, files: File[]): Promise<ExpenseQuotation> => {
   // 1. Upload du fichier PDF si fourni
   let pdfFileId = quotation.pdfFileId;
@@ -422,18 +411,8 @@ const updateInvoiceStatusIfExpired = async (quotationId: number): Promise<Expens
     throw error;
   }
 };
-const checkSequentialNumberExists = async (sequentialNumber: string): Promise<boolean> => {
-  try {
-    const response = await axios.get<{ exists: boolean }>(
-      '/public/expensquotation/check-sequential-number', 
-      { params: { sequentialNumber } }
-    );
-    return response.data.exists;
-  } catch (error) {
-    console.error('Error checking sequential number:', error);
-    return false; // Par défaut, considérez que le numéro n'existe pas en cas d'erreur
-  }
-};
+// Dans votre fichier api.ts ou similaire
+
 
 const exportQuotationPdf = async (quotationId: number, templateId?: number): Promise<Blob> => {
   try {
@@ -453,6 +432,13 @@ const exportQuotationPdf = async (quotationId: number, templateId?: number): Pro
   }
 };
 
+const checkSequentialNumber = async (sequentialNumber: string): Promise<{ exists: boolean }> => {
+  const response = await axios.get<{ exists: boolean }>(
+    `public/expensquotation/check-sequential/${sequentialNumber}`
+  );
+  return response.data;
+};
+
 export const expense_quotation = {
   factory,
   findPaginated,
@@ -468,7 +454,7 @@ export const expense_quotation = {
   validate,
   deletePdfFile,
   updateInvoiceStatusIfExpired,
-  checkSequentialNumberExists, // Ajoutez cette ligne
-  exportQuotationPdf
+  exportQuotationPdf,
+  checkSequentialNumber
 
 };

@@ -248,13 +248,12 @@ export const ExpenseInvoiceUpdateForm = ({ className, invoiceId }: ExpenseInvoic
                   id: article?.article?.id ?? 0,
                   title: article?.article?.title || '',
                   description: article?.article?.description || '',
-                  reference: article?.article?.reference || '', // Ajout de la référence obligatoire
+                  reference: article?.article?.reference || '',
                   quantityInStock: article?.article?.quantityInStock || 0,
-                  status: article?.article?.status || 'draft', // Valeur par défaut
-                  unitPrice: article?.article?.unitPrice || 0,// Ajout du prix unitaire,
-                  version:article?.article?.version || 0
-                   
-        
+                  status: article?.article?.status || 'draft',
+                  unitPrice: article?.article?.unitPrice || 0,
+                  notes: article?.article?.notes || '',
+                  version: article?.article?.version || 0
                 },
                 quantity: article?.quantity || 0,
                 unit_price: article?.unit_price || 0,
