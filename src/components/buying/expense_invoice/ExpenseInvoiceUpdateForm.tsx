@@ -29,7 +29,7 @@ import useInvoiceRangeDates from '@/hooks/content/useInvoiceRangeDates';
 import { useExpenseInvoiceManager } from './hooks/useExpenseInvoiceManager';
 import { useExpenseInvoiceControlManager } from './hooks/useExpenseInvoiceControlManager';
 import { useExpenseInvoiceArticleManager } from './hooks/useExpenseInvoiceArticleManager';
-import { EXPENSE_INVOICE_STATUS, ExpenseArticleInvoiceEntry, ExpenseInvoice, ExpenseInvoiceUploadedFile, ExpenseUpdateInvoiceDto } from '@/types/expense_invoices';
+import { EXPENSE_INVOICE_STATUS, ExpenseArticleInvoiceEntry, ExpenseCreateArticleInvoiceEntry, ExpenseInvoice, ExpenseInvoiceUploadedFile, ExpenseUpdateInvoiceDto } from '@/types/expense_invoices';
 import { ExpenseInvoiceControlSection } from './form/ExpenseInvoiceControlSection';
 import { ExpenseInvoiceFinancialInformation } from './form/ExpenseInvoiceFinancialInformation';
 import { ExpenseInvoiceGeneralConditions } from './form/ExpenseInvoiceGeneralConditions';
@@ -239,105 +239,172 @@ export const ExpenseInvoiceUpdateForm = ({ className, invoiceId }: ExpenseInvoic
 
   const onSubmit = async (status: EXPENSE_INVOICE_STATUS) => {
     try {
-      // Convertir les articles en DTO
-      const articlesDto: ExpenseArticleInvoiceEntry[] = articleManager.getArticles()?.map((article) => {
-        // Création d'un objet article complet avec valeurs par défaut
-         const mappedArticle = {
-                id: article?.id,
-                article: {
-                  id: article?.article?.id ?? 0,
-                  title: article?.article?.title || '',
-                  description: article?.article?.description || '',
-                  reference: article?.article?.reference || '',
-                  quantityInStock: article?.article?.quantityInStock || 0,
-                  status: article?.article?.status || 'draft',
-                  unitPrice: article?.article?.unitPrice || 0,
-                  notes: article?.article?.notes || '',
-                  version: article?.article?.version || 0
-                },
-                quantity: article?.quantity || 0,
-                unit_price: article?.unit_price || 0,
-                discount: article?.discount || 0,
-                discount_type: article?.discount_type === 'PERCENTAGE' 
-                  ? DISCOUNT_TYPE.PERCENTAGE 
-                  : DISCOUNT_TYPE.AMOUNT,
-                taxes: article?.expenseArticleInvoiceEntryTaxes?.map((entry) => entry?.tax?.id).filter(Boolean) as number[],
-                expenseArticleInvoiceEntryTaxes: article?.expenseArticleInvoiceEntryTaxes || []
-              };
-            
-              return mappedArticle;
-            }) || [];
+      // 1. Conversion des articles en DTO avec typage strict
+      const articlesDto: ExpenseCreateArticleInvoiceEntry[] = (articleManager.getArticles() || []).map((articleEntry) => {
+        if (!articleEntry.article) {
+          throw new Error(`Article is missing for entry ${articleEntry.id}`);
+        }
   
-      // Gestion des fichiers PDF
-      let pdfFileId = invoiceManager.pdfFileId; // ID du fichier PDF existant
+        return {
+          id: articleEntry.id,
+          articleId: articleEntry.article.id,
+          quantity: articleEntry.quantity || 0,
+          unit_price: articleEntry.unit_price || 0,
+          discount: articleEntry.discount || 0,
+          discount_type: articleEntry.discount_type || DISCOUNT_TYPE.AMOUNT,
+          taxes: (articleEntry.expenseArticleInvoiceEntryTaxes || [])
+            .map(entry => entry?.tax?.id)
+            .filter((id): id is number => id !== undefined),
+          reference: articleEntry.reference || '',
+          article: {
+            ...articleEntry.article,
+            version: (articleEntry.article.version || 0) + 1,
+            title: articleEntry.article.title || '',
+            description: articleEntry.article.description || '',
+            unitPrice: articleEntry.unit_price || 0
+          }
+        };
+      });
   
-      // Si un nouveau fichier PDF est uploadé, on l'upload et on récupère son ID
+      // 2. Gestion des fichiers PDF
+      let pdfFileId = invoiceManager.pdfFileId;
       if (invoiceManager.pdfFile) {
         const [uploadedPdfFileId] = await api.upload.uploadFiles([invoiceManager.pdfFile]);
-        pdfFileId = uploadedPdfFileId; // Mettre à jour l'ID du fichier PDF
+        pdfFileId = uploadedPdfFileId;
       }
   
-      // Upload des fichiers supplémentaires (exclure le fichier PDF)
+      // 3. Upload des fichiers supplémentaires
       const additionalFiles = invoiceManager.uploadedFiles
-        .filter((u) => !u.upload) // Fichiers supplémentaires non encore uploadés
+        .filter((u) => !u.upload)
         .map((u) => u.file);
   
-      const uploadIds = await api.upload.uploadFiles(additionalFiles);
+      const uploadIds = additionalFiles.length > 0 
+        ? await api.upload.uploadFiles(additionalFiles) 
+        : [];
   
-      // Créer l'objet invoice avec les fichiers uploadés
-      const invoice: ExpenseUpdateInvoiceDto = {
-        id: invoiceManager?.id,
-        date: invoiceManager?.date?.toString(),
-        dueDate: invoiceManager?.dueDate?.toString(),
-        object: invoiceManager?.object,
-        sequentialNumbr: invoiceManager?.sequentialNumbr,
-        sequential: '', // Assurez-vous que sequentialNumbr est bien défini ici
-        cabinetId: invoiceManager?.firm?.cabinetId,
-        firmId: invoiceManager?.firm?.id,
-        interlocutorId: invoiceManager?.interlocutor?.id,
-        currencyId: invoiceManager?.currency?.id,
-        bankAccountId: !controlManager?.isBankAccountDetailsHidden ? invoiceManager?.bankAccount?.id : undefined,
+      // 4. Construction du DTO complet
+      const invoiceDto: ExpenseUpdateInvoiceDto = {
+        id: invoiceManager.id,
+        date: invoiceManager.date?.toISOString() || new Date().toISOString(),
+        dueDate: invoiceManager.dueDate?.toISOString().split('T')[0] || '',
+        object: invoiceManager.object || '',
+        sequentialNumbr: invoiceManager.sequentialNumbr || '',
+        sequential: invoiceManager.sequentialNumbr || '',
+        cabinetId: invoiceManager.firm?.cabinetId || 1,
+        firmId: invoiceManager.firm?.id,
+        interlocutorId: invoiceManager.interlocutor?.id,
+        currencyId: invoiceManager.currency?.id,
+        bankAccountId: !controlManager.isBankAccountDetailsHidden 
+          ? invoiceManager.bankAccount?.id 
+          : undefined,
         status,
-        generalConditions: !controlManager.isGeneralConditionsHidden ? invoiceManager?.generalConditions : '',
-        notes: invoiceManager?.notes,
+        generalConditions: !controlManager.isGeneralConditionsHidden 
+          ? invoiceManager.generalConditions 
+          : undefined,
+        notes: invoiceManager.notes || '',
         articleInvoiceEntries: articlesDto,
-        discount: invoiceManager?.discount,
-        discount_type: invoiceManager?.discountType === 'PERCENTAGE' ? DISCOUNT_TYPE.PERCENTAGE : DISCOUNT_TYPE.AMOUNT,
-        quotationId: invoiceManager?.quotationId,
-        taxStampId: invoiceManager?.taxStampId,
-        taxWithholdingId: invoiceManager?.taxWithholdingId,
-        pdfFileId, // Inclure l'ID du fichier PDF (nouveau ou existant)
+        discount: invoiceManager.discount || 0,
+        discount_type: invoiceManager.discountType === 'PERCENTAGE' 
+          ? DISCOUNT_TYPE.PERCENTAGE 
+          : DISCOUNT_TYPE.AMOUNT,
+        quotationId: invoiceManager.quotationId,
+        taxStampId: invoiceManager.taxStampId,
+        taxWithholdingId: invoiceManager.taxWithholdingId,
+        pdfFileId,
         uploads: [
-          ...(invoiceManager.uploadedFiles.filter((u) => !!u.upload).map((u) => ({ uploadId: u.upload.id }))), // Fichiers existants
-          ...uploadIds.map((id) => ({ uploadId: id })), // Nouveaux fichiers
+          ...(invoiceManager.uploadedFiles
+            .filter((u) => !!u.upload)
+            .map((u) => ({ uploadId: u.upload.id }))),
+          ...uploadIds.map((id) => ({ uploadId: id })),
         ],
         expenseInvoiceMetaData: {
-          showArticleDescription: !controlManager?.isArticleDescriptionHidden,
+          showArticleDescription: !controlManager.isArticleDescriptionHidden,
           hasBankingDetails: !controlManager.isBankAccountDetailsHidden,
           hasGeneralConditions: !controlManager.isGeneralConditionsHidden,
-          hasTaxWithholding: !controlManager.isTaxWithholdingHidden,
-        },
+          hasTaxStamp: !!invoiceManager.taxStampId,
+          hasTaxWithholding: !!invoiceManager.taxWithholdingId,
+        }
       };
   
-      // Validation de la facture
-      const validation = api.expense_invoice.validate(invoice, dateRange);
+      // 5. Validation
+      const validation = api.expense_invoice.validate(invoiceDto, dateRange);
       if (validation.message) {
         toast.error(validation.message);
-      } else {
-        if (controlManager.isGeneralConditionsHidden) delete invoice.generalConditions;
-  
-        // Mettre à jour la facture avec les fichiers
-        updateInvoice({
-          invoice,
-          files: additionalFiles, // Fichiers supplémentaires
-        });
-  
-        // Réinitialiser l'état après la mise à jour
-        globalReset();
+        return;
       }
+  
+      // 6. Nettoyage des champs optionnels
+      if (controlManager.isGeneralConditionsHidden) {
+        delete invoiceDto.generalConditions;
+      }
+      if (controlManager.isBankAccountDetailsHidden) {
+        delete invoiceDto.bankAccountId;
+      }
+  
+      // 7. Envoi de la requête avec gestion de la réponse
+      updateInvoice({
+        invoice: invoiceDto,
+        files: additionalFiles,
+      }, {
+        onSuccess: (updatedInvoice) => {
+          // Fonction helper pour convertir Date | null en Date | undefined
+          const normalizeDeletedAt = (date: Date | null | undefined): Date | undefined => {
+            return date === null ? undefined : date;
+          };
+  
+          const updatedArticles: ExpenseArticleInvoiceEntry[] = (updatedInvoice.articleExpenseEntries || []).map(entry => {
+            if (!entry.article) {
+              console.error('Article missing in response entry:', entry);
+              throw new Error('Article data missing in server response');
+            }
+  
+            return {
+              ...entry,
+              article: {
+                id: entry.article.id,
+                title: entry.article.title || '',
+                description: entry.article.description || '',
+                reference: entry.reference || entry.article.reference || '',
+                quantityInStock: entry.article.quantityInStock || 0,
+                status: entry.article.status || 'active',
+                version: (entry.article.version || 0) + 1,
+                unitPrice: entry.unit_price || entry.article.unitPrice || 0,
+                notes: entry.article.notes || '',
+                isDeletionRestricted: entry.article.isDeletionRestricted || false,
+                createdAt: entry.article.createdAt || new Date(),
+                updatedAt: entry.article.updatedAt || new Date(),
+                deletedAt: normalizeDeletedAt(entry.article.deletedAt) // Conversion ici
+              },
+              expenseArticleInvoiceEntryTaxes: entry.expenseArticleInvoiceEntryTaxes || []
+            };
+          });
+  
+          articleManager.setArticles(updatedArticles);
+          
+          refetchInvoice()
+            .then(() => toast.success("Facture mise à jour avec succès"))
+            .catch((error) => {
+              console.error('Error refetching invoice:', error);
+              toast.error("Erreur lors de la récupération des données mises à jour");
+            });
+        },
+        onError: (error) => {
+          console.error("Erreur détaillée:", error);
+          toast.error("Échec de la mise à jour", {
+            description: getErrorMessage('invoicing', error),
+            action: {
+              label: 'Réessayer',
+              onClick: () => onSubmit(status)
+            }
+          });
+        }
+      });
+  
     } catch (error) {
-      console.error('Error updating invoice:', error);
-      toast.error('An error occurred while updating the invoice');
+      console.error('Erreur lors de la préparation de la mise à jour:', error);
+      toast.error("Une erreur est survenue", {
+        description: error instanceof Error ? error.message : 'Erreur inconnue'
+      });
     }
   };
   if (debounceFetching) return <Spinner className="h-screen" />;

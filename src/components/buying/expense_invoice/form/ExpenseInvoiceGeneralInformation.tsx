@@ -225,48 +225,44 @@ export const ExpenseInvoiceGeneralInformation = ({
           )}
         </div>
         <div className="w-1/3">
-  <Label className="text-xs font-semibold mb-1">{tInvoicing('invoice.singular')} N°</Label>
-  {edit ? (
-    <>
-      <Input
-        className={cn(
-          "w-full h-8",
-          (!invoiceManager.sequentialNumbr || 
-          (invoiceManager.sequentialNumbr && 
-          (!validateSequentialNumber(invoiceManager.sequentialNumbr))) && 
-          "border-red-500 focus-visible:ring-red-500"
-        ))}
-        placeholder="Format: INV-1234"
-        value={invoiceManager.sequentialNumbr || ''}
-        onChange={async (e) => {
-          const value = e.target.value;
-          invoiceManager.set('sequentialNumbr', value);
-          
-          // Vérifier si le numéro existe seulement quand le format est valide
-          if (validateSequentialNumber(value)) {
-            try {
-              const { exists } = await api.expense_invoice.checkSequentialNumber(value);
-              if (exists) {
-                toast.error(tInvoicing('invoice.sequential_number_exists'));
+  <Label className="text-xs font-semibold mb-1">
+    {tInvoicing('invoice.singular')} N° *
+  </Label>
+  {edit && !isInspectMode ? (
+    <div className="relative">
+      <div className="flex items-center">
+        <span className="inline-flex items-center h-8 px-3 text-sm border border-r-0 rounded-l-md bg-gray-50 text-gray-500 border-gray-300">
+          INV-
+        </span>
+        <Input
+          className={cn(
+            "w-full h-8 rounded-l-none",
+            "border-red-500 focus-visible:ring-red-500"
+          )}
+          placeholder="12345"
+          value={invoiceManager.sequentialNumbr?.replace('INV-', '') || ''}
+          onChange={async (e) => {  // Mark the callback as async
+            // N'autoriser que les chiffres
+            const numericValue = e.target.value.replace(/[^0-9]/g, '');
+            const fullNumber = `INV-${numericValue}`;
+            invoiceManager.set('sequentialNumbr', fullNumber);
+            
+            // Vérifier si le numéro existe seulement quand le format est valide
+            if (numericValue) {
+              try {
+                const response = await api.expense_invoice.checkSequentialNumber(fullNumber);
+                if (response.exists) {
+                  toast.error(tInvoicing('invoice.sequential_number_exists'));
+                }
+              } catch (error) {
+                console.error("Error checking sequential number:", error);
               }
-            } catch (error) {
-              console.error("Error checking sequential number:", error);
             }
-          }
-        }}
-        isPending={loading}
-      />
-      {!invoiceManager.sequentialNumbr ? (
-        <p className="text-xs text-red-500 mt-1">
-          Le numéro de facture est requis
-        </p>
-      ) : invoiceManager.sequentialNumbr && 
-         !validateSequentialNumber(invoiceManager.sequentialNumbr) ? (
-        <p className="text-xs text-red-500 mt-1">
-          Format invalide. Format attendu: INV-12345
-        </p>
-      ) : null}
-    </>
+          }}
+          isPending={loading}
+        />
+      </div>
+    </div>
   ) : (
     <UneditableInput value={invoiceManager.sequentialNumbr || ''} />
   )}

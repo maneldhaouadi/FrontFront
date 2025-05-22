@@ -172,6 +172,7 @@ export const ExpenseQuotationUpdateForm = ({ className, expensequotationId }: Ex
   };
 
   // Initialized value to detect changes while modifying the quotation
+  //Methode reset
   const { isDisabled, globalReset } = useInitializedState({
     data: quotation || ({} as Partial<ExpenseQuotation & { files: ExpensQuotationUploadedFile[] }>),
     getCurrentData: () => ({

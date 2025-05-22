@@ -89,37 +89,38 @@ export const ExpensePaymentControlSection = ({
   return (
     <div className={className}>
       <div className="flex flex-col w-full gap-2">
-        {isInspectMode ?(
-          <Button 
-            variant="outline" 
-            className="flex items-center gap-2"
-            onClick={() => router.back()}
-          >
-            <EyeOff className="h-5 w-5" />
-            <span>{tCommon('commands.exit_inspect_mode')}</span>
-          </Button>
-        ) : (
-          <>
-            <Button 
-              className="flex items-center gap-2" 
-              onClick={handleSubmit}
-              disabled={loading}
-            >
-              <Save className="h-5 w-5" />
-              <span>{tCommon('commands.save')}</span>
-            </Button>
-            <Button 
-              className="flex items-center gap-2" 
-              variant={'outline'} 
-              onClick={reset}
-              disabled={isCreateMode || loading}
-            >
-              <Save className="h-5 w-5" />
-              <span>{tCommon('commands.initialize')}</span>
-            </Button>
-          </>
-        )}
-
+        {isInspectMode ? (
+  <Button 
+    variant="outline" 
+    className="flex items-center gap-2"
+    onClick={() => router.back()}
+  >
+    <EyeOff className="h-5 w-5" />
+    <span>{tCommon('inspect_mode')}</span>
+  </Button>
+) : (
+  <>
+    <Button 
+      className="flex items-center gap-2" 
+      onClick={handleSubmit}
+      disabled={loading}
+    >
+      <Save className="h-5 w-5" />
+      <span>{tCommon('commands.save')}</span>
+    </Button>
+    {!isCreateMode && (
+      <Button 
+        className="flex items-center gap-2" 
+        variant={'outline'} 
+        onClick={reset}
+        disabled={loading}
+      >
+        <Save className="h-5 w-5" />
+        <span>{tCommon('commands.initialize')}</span>
+      </Button>
+    )}
+  </>
+)}
         {/* Calculator UI - masqué en mode inspection */}
         {!isInspectMode  && (
           <div className="w-64 mx-auto mt-10 bg-gray-100 rounded-lg shadow-lg p-4">

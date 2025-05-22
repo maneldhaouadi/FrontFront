@@ -8,6 +8,8 @@ import InvoicePaymentsCard from './InvoicePaymentsCard';
 import { cn } from '@/lib/utils';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { HistoryIcon, XIcon } from 'lucide-react';
+import { Article } from '@/types';
+import axios from '@/api/axios';
 
 
 interface DialogflowTableProps {
@@ -17,6 +19,12 @@ interface DialogflowTableProps {
   onShowFullHistory?: () => void;
   expandedHistory?: boolean;
 }
+interface Translation {
+  invalidFormat: string;
+  beforeCreation: string;
+  example: string;
+}
+
 
 type DocumentDetails = {
   number?: string;
@@ -96,6 +104,15 @@ type HistoryEntry = {
   lateInvoices?: LateInvoicesResponse;
   invoicePayments?: InvoicePaymentsResponse;
   timestamp: Date;
+  isRetry?: boolean;
+  isArticleSelection?: boolean;
+  availableArticles?: {id: number, quantity: number}[];
+  isFirmSelection?: boolean;
+  availableFirms?: string[];
+  isStatusSelection?: boolean;
+  availableStatuses?: { value: string; label: string }[];
+  isCurrencySelection?: boolean;
+  availableCurrencies?: string[];
 };
 
 type ComparisonParams = {
@@ -147,7 +164,8 @@ const DialogflowTable = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
-
+  const [quotationDate, setQuotationDate] = useState<string>('');
+  const [selectedCurrency, setSelectedCurrency] = useState<string>('EUR');
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -379,6 +397,30 @@ const DialogflowTable = ({
     }
   };
 
+  
+  const fetchAvailableArticles = async (): Promise<{id: number, quantity: number}[]> => {
+    try {
+      const response = await api.article.findPaginated(
+        1,
+        100,
+        'ASC',
+        'id',
+        '',
+        []
+      );
+      
+      // Filtrer les articles avec quantité > 0 et retourner les IDs et quantités
+      return response.data
+        .filter(article => article.quantityInStock > 0)
+        .map(article => ({
+          id: article.id,
+          quantity: article.quantityInStock
+        }));
+    } catch (error) {
+      console.error("Error fetching articles:", error);
+      return [];
+    }
+  };
   const getInputPlaceholder = () => {
     if (!isInQuotationFlow()) {
       return languageCode === 'fr' 
@@ -390,34 +432,700 @@ const DialogflowTable = ({
 
     const step = getCurrentStep();
     const placeholders: Record<string, string> = {
-      'sequentialNumbr': languageCode === 'fr' ? 'Numéro séquentiel (ex: QUO-123456)' : 'Sequential number (ex: QUO-123456)',
-      'object': languageCode === 'fr' ? 'Objet du devis' : 'Quotation subject',
+      'sequentialNumbr': languageCode === 'fr' 
+        ? 'Numéro séquentiel (format: QUO-123456 - 6 chiffres requis)' 
+        : 'Sequential number (format: QUO-123456 - 6 digits required)',
+        'object': languageCode === 'fr' ? 'Objet du devis' : 'Quotation subject',
       'firmName': languageCode === 'fr' ? 'Nom de la firme' : 'Firm name',
       'InterlocutorName': languageCode === 'fr' ? 'Nom complet de l\'interlocuteur' : 'Interlocutor full name',
-      'date': languageCode === 'fr' ? 'Date (JJ-MM-AAAA)' : 'Date (DD-MM-YYYY)',
-      'duedate': languageCode === 'fr' ? 'Date échéance (JJ-MM-AAAA)' : 'Due date (DD-MM-YYYY)',
-      'status': languageCode === 'fr' ? 'Statut (Brouillon, En attente, Validé, Refusé)' : 'Status (Draft, Pending, Validated, Rejected)',
+      'date': languageCode === 'fr' ? 'Date de création (JJ-MM-AAAA)' : 'Creation date (DD-MM-YYYY)',
+      'duedate': languageCode === 'fr' 
+      ? 'Date échéance (JJ-MM-AAAA) - Doit être après la date de création' 
+      : 'Due date (DD-MM-YYYY) - Must be after creation date',
       'articleId': languageCode === 'fr' ? 'ID article (nombre entier)' : 'Article ID (integer)',
-      'quantity': languageCode === 'fr' ? 'Quantité (nombre entier)' : 'Quantity (integer)',
-      'unitPrice': languageCode === 'fr' ? 'Prix unitaire (nombre décimal ou "défaut")' : 'Unit price (decimal or "default")',
-      'discount': languageCode === 'fr' ? 'Remise (nombre décimal ou pourcentage, ex: 10 ou 10%)' : 'Discount (decimal or percentage, ex: 10 or 10%)',
-      'moreArticles': languageCode === 'fr' ? 'Ajouter un autre article ? (Oui/Non)' : 'Add another item? (Yes/No)',
+      'quantity': languageCode === 'fr' 
+      ? 'Quantité (nombre entier) - Vérification du stock automatique' 
+      : 'Quantity (integer) - Automatic stock check',
+      'unitPrice': languageCode === 'fr' 
+      ? 'Prix unitaire (nombre décimal)' 
+      : 'Unit price (decimal number)','moreArticles': languageCode === 'fr' ? 'Ajouter un autre article ? (Oui/Non)' : 'Add another item? (Yes/No)',
       'finalize': languageCode === 'fr' ? 'Confirmer la création ? (Oui/Non)' : 'Confirm creation? (Yes/No)'
     };
 
     return placeholders[step] || (languageCode === 'fr' ? 'Répondez à la question...' : 'Answer the question...');
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!queryText.trim()) return;
+  const validateDueDate = (dueDateInput: string, lang: 'fr' | 'en' | 'es' = 'fr'): { isValid: boolean; error?: string } => {
+    // Vérification du format
+    const dateRegex = /^\d{2}-\d{2}-\d{4}$/;
+    if (!dateRegex.test(dueDateInput)) {
+        return {
+            isValid: false,
+            error: lang === 'fr' 
+                ? "❌ Format invalide. Utilisez strictement JJ-MM-AAAA (ex: 01-03-2025)" 
+                : "❌ Invalid format. Use strictly DD-MM-YYYY (ex: 01-03-2025)"
+        };
+    }
+
+    // Vérification des valeurs numériques
+    const [day, month, year] = dueDateInput.split('-').map(Number);
+    if (isNaN(day) || isNaN(month) || isNaN(year)) {
+        return {
+            isValid: false,
+            error: lang === 'fr' 
+                ? "❌ La date contient des valeurs non numériques" 
+                : "❌ Date contains non-numeric values"
+        };
+    }
+
+    // Validation des plages
+    if (month < 1 || month > 12) {
+        return {
+            isValid: false,
+            error: lang === 'fr' 
+                ? "❌ Le mois doit être entre 01 et 12" 
+                : "❌ Month must be between 01 and 12"
+        };
+    }
+
+    // Validation date valide
+    const dueDate = new Date(year, month - 1, day);
+    if (isNaN(dueDate.getTime())) {
+        return {
+            isValid: false,
+            error: lang === 'fr'
+                ? "❌ Date d'échéance invalide"
+                : "❌ Invalid due date"
+        };
+    }
+
+    // Validation date postérieure à aujourd'hui
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // On ignore l'heure pour la comparaison
+    if (dueDate <= today) {
+        return {
+            isValid: false,
+            error: lang === 'fr'
+                ? `❌ La date d'échéance (${dueDateInput}) doit être strictement postérieure à aujourd'hui`
+                : `❌ Due date (${dueDateInput}) must be strictly after today`
+        };
+    }
+
+    return { isValid: true };
+};
+
+const fetchAvailableFirms = async (): Promise<string[]> => {
+  try {
+    // Utilisez findPaginated au lieu de findChoices pour obtenir plus de données
+    const response = await api.firm.findPaginated(
+      1, // page
+      100, // taille
+      'ASC', // ordre
+      'name', // clé de tri
+      '', // recherche
+      [] // relations
+    );
+    
+    // Assurez-vous que la réponse contient bien un tableau data
+    if (response && response.data) {
+      return response.data
+        .map(firm => firm.name)
+        .filter((name): name is string => !!name); // Filtre les valeurs nulles/undefined
+    }
+    return [];
+  } catch (error) {
+    console.error("Error fetching firms:", error);
+    return [];
+  }
+};
+
+const validateUnitPrice = (input: string): { isValid: boolean; value?: number; currency?: string; error?: string } => {
+  // Expression régulière pour capturer le montant et la devise
+  const regex = /^(\d+(?:[.,]\d+)?)\s*([A-Za-z]{3})?$/;
+  const match = input.trim().match(regex);
   
-    const userMessage: HistoryEntry = {
+  if (!match) {
+    return {
+      isValid: false,
+      error: languageCode === 'fr' 
+        ? "Format invalide. Utilisez '150 EUR' ou simplement '150'" 
+        : "Invalid format. Use '150 EUR' or just '150'"
+    };
+  }
+
+  const amountStr = match[1].replace(',', '.');
+  const amount = parseFloat(amountStr);
+  const currency = match[2]?.toUpperCase();
+
+  if (isNaN(amount)) {
+    return {
+      isValid: false,
+      error: languageCode === 'fr' 
+        ? "Le montant doit être un nombre valide" 
+        : "Amount must be a valid number"
+    };
+  }
+
+  return {
+    isValid: true,
+    value: amount,
+    currency: currency || 'EUR' // EUR par défaut si non spécifié
+  };
+};
+  
+// Ajoutez cet effet quelque part dans votre composant
+useEffect(() => {
+  const loadFirmsIfNeeded = async () => {
+    if (isInQuotationFlow() && getCurrentStep() === 'firmName' && queryText === '') {
+      try {
+        setIsTyping(true);
+        const firms = await fetchAvailableFirms();
+        
+        if (firms.length > 0) {
+          const botMessage: HistoryEntry = {
+            sender: 'bot',
+            text: languageCode === 'fr' 
+              ? 'Veuillez sélectionner une entreprise parmi la liste :' 
+              : 'Please select a firm from the list:',
+            timestamp: new Date(),
+            isFirmSelection: true,
+            availableFirms: firms
+          };
+          
+          setMessages(prev => [...prev, botMessage]);
+          storeSession(sessionId, [...messages, botMessage]);
+        } else {
+          const errorMessage: HistoryEntry = {
+            sender: 'bot',
+            text: languageCode === 'fr' 
+              ? 'Aucune entreprise disponible. Veuillez entrer le nom manuellement.' 
+              : 'No firms available. Please enter the name manually.',
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, errorMessage]);
+        }
+      } catch (error) {
+        console.error('Error loading firms:', error);
+      } finally {
+        setIsTyping(false);
+      }
+    }
+  };
+
+  loadFirmsIfNeeded();
+}, [currentContexts, languageCode, queryText]);
+  
+
+const fetchAvailableStatuses = async (): Promise<{ value: string; label: string }[]> => {
+  try {
+    const response = await api.expense_quotation.getAvailableStatuses();
+    return response;
+  } catch (error) {
+    console.error("Error fetching statuses:", error);
+    return [];
+  }
+};
+useEffect(() => {
+  const loadStatusesIfNeeded = async () => {
+    // Vérifie si le dernier message du bot demande un statut
+    const lastMessage = messages[messages.length - 1];
+    const isAskingForStatus = lastMessage?.sender === 'bot' && 
+                            (lastMessage.text.toLowerCase().includes('statut') || 
+                             lastMessage.text.toLowerCase().includes('status'));
+
+    if (isAskingForStatus && !lastMessage.isStatusSelection) {
+      try {
+        setIsTyping(true);
+        const statuses = await fetchAvailableStatuses();
+        
+        if (statuses.length > 0) {
+          const statusMessage: HistoryEntry = {
+            sender: 'bot',
+            text: languageCode === 'fr' 
+              ? 'Veuillez sélectionner un statut parmi la liste :' 
+              : 'Please select a status from the list:',
+            timestamp: new Date(),
+            isStatusSelection: true,
+            availableStatuses: statuses
+          };
+          
+          setMessages(prev => [...prev, statusMessage]);
+          storeSession(sessionId, [...messages, statusMessage]);
+        }
+      } catch (error) {
+        console.error('Error loading statuses:', error);
+      } finally {
+        setIsTyping(false);
+      }
+    }
+  };
+
+  loadStatusesIfNeeded();
+}, [messages, languageCode, sessionId]);
+
+
+useEffect(() => {
+  const loadCurrenciesIfNeeded = async () => {
+    if (isInQuotationFlow() && getCurrentStep() === 'unitPrice' && queryText === '') {
+      try {
+        setIsTyping(true);
+        const currencies = await fetchAvailableCurrencies();
+        
+        if (currencies.length > 0) {
+          const botMessage: HistoryEntry = {
+            sender: 'bot',
+            text: languageCode === 'fr' 
+              ? 'Veuillez sélectionner une devise parmi la liste :' 
+              : 'Please select a currency from the list:',
+            timestamp: new Date(),
+            isCurrencySelection: true,
+            availableCurrencies: currencies
+          };
+          
+          setMessages(prev => [...prev, botMessage]);
+          storeSession(sessionId, [...messages, botMessage]);
+        }
+      } catch (error) {
+        console.error('Error loading currencies:', error);
+      } finally {
+        setIsTyping(false);
+      }
+    }
+  };
+
+  loadCurrenciesIfNeeded();
+}, [currentContexts, languageCode, queryText]);
+const fetchAvailableCurrencies = async (): Promise<string[]> => {
+  try {
+    const response = await api.currency.find();
+    // Extraire les codes de devise des objets Currency
+    return response.map(currency => currency.code);
+  } catch (error) {
+    console.error("Error fetching currencies:", error);
+    return ['EUR', 'USD', 'GBP', 'JPY']; // Valeurs par défaut en cas d'erreur
+  }
+};
+
+const checkArticleAvailability = async (articleId: number, quantity: number): Promise<{
+  available: boolean;
+  availableQuantity: number;
+  message?: string;
+}> => {
+  try {
+    const response = await api.article.checkAvailability(articleId, quantity);
+    return {
+      available: response.available,
+      availableQuantity: response.availableQuantity,
+      message: response.message
+    };
+  } catch (error) {
+    console.error("Error checking article availability:", error);
+    return {
+      available: false,
+      availableQuantity: 0,
+      message: languageCode === 'fr' 
+        ? "Erreur lors de la vérification de la disponibilité" 
+        : "Error checking availability"
+    };
+  }
+};
+
+const updateArticleStock = async (
+  id: number,
+  quantityChange: number
+): Promise<Article> => {
+  try {
+    const response = await axios.put<Article>(`/public/article/${id}/update-stock`, {
+      quantityChange
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Erreur lors de la mise à jour du stock:", error);
+    throw new Error("Impossible de mettre à jour le stock de l'article.");
+  }
+};
+
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!queryText.trim()) return;
+
+  const userMessage: HistoryEntry = {
       sender: 'user',
       text: queryText,
       timestamp: new Date()
+  };
+
+  if (isInQuotationFlow() && getCurrentStep() === 'quantity') {
+    const quantity = parseInt(queryText);
+    if (isNaN(quantity) || quantity <= 0) {
+      const errorMessage: HistoryEntry = {
+        sender: 'bot',
+        text: languageCode === 'fr' 
+          ? "La quantité doit être un nombre entier positif" 
+          : "Quantity must be a positive integer",
+        timestamp: new Date(),
+        isRetry: true
+      };
+      
+      const updatedMessages = [...messages, userMessage, errorMessage];
+      setMessages(updatedMessages);
+      storeSession(sessionId, updatedMessages);
+      setIsTyping(false);
+      return;
+    }
+
+    // Trouver le dernier message du bot qui contient l'ID de l'article
+    const lastBotMessage = [...messages].reverse().find(msg => 
+      msg.sender === 'bot' && msg.text.includes('Article') && msg.text.includes('ID')
+    );
+
+    // Extraire l'ID de l'article du texte du message
+    let articleId: number | null = null;
+    if (lastBotMessage) {
+      const idMatch = lastBotMessage.text.match(/ID:\s*(\d+)/i);
+      if (idMatch && idMatch[1]) {
+        articleId = parseInt(idMatch[1]);
+      }
+    }
+
+    // Si on n'a pas trouvé l'ID dans le message, essayer de le récupérer du contexte
+    if (!articleId) {
+      const quotationContext = currentContexts.find(ctx => 
+        ctx.name.includes('awaiting_quotation')
+      );
+      articleId = quotationContext?.parameters?.fields?.articleId?.numberValue || 
+                 quotationContext?.parameters?.articleId;
+    }
+
+    if (!articleId) {
+      const errorMessage: HistoryEntry = {
+        sender: 'bot',
+        text: languageCode === 'fr' 
+          ? "Erreur: Impossible de déterminer l'article référencé. Veuillez recommencer la sélection de l'article." 
+          : "Error: Could not determine referenced article. Please restart article selection.",
+        timestamp: new Date(),
+        isRetry: true
+      };
+      
+      const updatedMessages = [...messages, userMessage, errorMessage];
+      setMessages(updatedMessages);
+      storeSession(sessionId, updatedMessages);
+      setIsTyping(false);
+      return;
+    }
+
+    // Vérifier la disponibilité
+    try {
+      const availability = await checkArticleAvailability(articleId, quantity);
+      
+      if (!availability.available) {
+        const errorMessage: HistoryEntry = {
+          sender: 'bot',
+          text: availability.message || 
+            (languageCode === 'fr' 
+              ? `Quantité insuffisante. Stock disponible: ${availability.availableQuantity}` 
+              : `Insufficient quantity. Available stock: ${availability.availableQuantity}`),
+          timestamp: new Date(),
+          isRetry: true
+        };
+        
+        const updatedMessages = [...messages, userMessage, errorMessage];
+        setMessages(updatedMessages);
+        storeSession(sessionId, updatedMessages);
+        setIsTyping(false);
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking article availability:', error);
+      const errorMessage: HistoryEntry = {
+        sender: 'bot',
+        text: languageCode === 'fr' 
+          ? "Erreur lors de la vérification de la disponibilité" 
+          : "Error checking availability",
+        timestamp: new Date(),
+        isRetry: true
+      };
+      
+      const updatedMessages = [...messages, userMessage, errorMessage];
+      setMessages(updatedMessages);
+      storeSession(sessionId, updatedMessages);
+      setIsTyping(false);
+      return;
+    }
+  }
+  // Dans handleSubmit, avant l'envoi standard à Dialogflow
+  if (isInQuotationFlow() && getCurrentStep() === 'unitPrice') {
+    const amount = parseFloat(queryText.replace(',', '.'));
+    
+    if (isNaN(amount)) {
+      const errorMessage: HistoryEntry = {
+        sender: 'bot',
+        text: languageCode === 'fr' 
+          ? "Le montant doit être un nombre valide" 
+          : "Amount must be a valid number",
+        timestamp: new Date(),
+        isRetry: true
+      };
+      
+      const updatedMessages = [...messages, userMessage, errorMessage];
+      setMessages(updatedMessages);
+      storeSession(sessionId, updatedMessages);
+      setIsTyping(false);
+      return;
+    }
+
+    // Si validation OK, préparer les paramètres
+    const parameters = {
+      fields: {
+        queryText: { stringValue: `${amount} ${selectedCurrency}` },
+        currentStep: { stringValue: 'unitPrice' },
+        unitPrice: { numberValue: amount },
+        currency: { stringValue: selectedCurrency },
+        quotationData: {
+          structValue: {
+            fields: {
+              unitPrice: { numberValue: amount },
+              currency: { stringValue: selectedCurrency }
+            }
+          }
+        }
+      }
     };
+
+    try {
+      setIsTyping(true);
+      const response = await api.dialogflow.sendRequest({
+        languageCode,
+        queryText: `${amount} ${selectedCurrency}`,
+        sessionId,
+        parameters,
+        outputContexts: currentContexts
+      });
+
+      if (response.outputContexts) {
+        setCurrentContexts(response.outputContexts);
+      }
+
+      const botMessage: HistoryEntry = {
+        sender: 'bot',
+        text: response.fulfillmentText,
+        timestamp: new Date()
+      };
+
+      const updatedMessages = [...messages, userMessage, botMessage];
+      setMessages(updatedMessages);
+      storeSession(sessionId, updatedMessages);
+      setQueryText('');
+      return;
+    } catch (error) {
+      console.error('Dialogflow error:', error);
+      const errorMessage: HistoryEntry = {
+        sender: 'bot',
+        text: languageCode === 'fr' 
+          ? "Erreur lors du traitement. Veuillez réessayer." 
+          : "Processing error. Please try again.",
+        timestamp: new Date(),
+        isRetry: true
+      };
+      
+      setMessages(prev => [...prev, errorMessage]);
+      storeSession(sessionId, [...messages, userMessage, errorMessage]);
+      return;
+    } finally {
+      setIsTyping(false);
+    }
+  }
+
+  // Si c'est l'étape de sélection d'entreprise
+  if (isInQuotationFlow() && getCurrentStep() === 'firmName') {
+      const availableFirms = await fetchAvailableFirms();
+      
+      // Normalisation des noms pour la comparaison (en minuscules)
+      const normalizedInput = queryText.trim().toLowerCase();
+      const normalizedAvailableFirms = availableFirms.map(f => f.toLowerCase());
+      
+      // Vérification si l'entreprise existe (comparaison insensible à la casse)
+      if (!normalizedAvailableFirms.includes(normalizedInput)) {
+          const errorMessage: HistoryEntry = {
+              sender: 'bot',
+              text: languageCode === 'fr' 
+                  ? `L'entreprise "${queryText}" n'est pas valide. Veuillez choisir parmi les entreprises disponibles:` 
+                  : `Firm "${queryText}" is not valid. Please choose from available firms:`,
+              timestamp: new Date(),
+              isFirmSelection: true,
+              availableFirms
+          };
+          
+          const updatedMessages = [...messages, userMessage, errorMessage];
+          setMessages(updatedMessages);
+          storeSession(sessionId, updatedMessages);
+          setIsTyping(false);
+          return;
+      }
+
+      // Si l'entreprise est valide, envoyer la réponse à Dialogflow
+      try {
+          const parameters = {
+              fields: {
+                  queryText: { stringValue: queryText },
+                  currentStep: { stringValue: 'firmName' },
+                  firmName: { stringValue: queryText.trim() },
+                  quotationData: {
+                      structValue: {
+                          fields: {
+                              firmName: { stringValue: queryText.trim() }
+                          }
+                      }
+                  }
+              }
+          };
+
+          setIsTyping(true);
+          const response = await api.dialogflow.sendRequest({
+              languageCode,
+              queryText: queryText.trim(),
+              sessionId,
+              parameters,
+              outputContexts: currentContexts
+          });
+
+          if (response.outputContexts) {
+              setCurrentContexts(response.outputContexts);
+          }
+
+          const botMessage: HistoryEntry = {
+              sender: 'bot',
+              text: response.fulfillmentText || 
+                  (languageCode === 'fr' 
+                      ? "Entreprise sélectionnée. Veuillez entrer le nom de l'interlocuteur" 
+                      : "Firm selected. Please enter interlocutor name"),
+              timestamp: new Date()
+          };
+
+          const updatedMessages = [...messages, userMessage, botMessage];
+          setMessages(updatedMessages);
+          storeSession(sessionId, updatedMessages);
+          setQueryText('');
+          return;
+      } catch (error) {
+          console.error('Dialogflow error:', error);
+          const errorMessage: HistoryEntry = {
+              sender: 'bot',
+              text: languageCode === 'fr' 
+                  ? "Erreur lors du traitement. Veuillez réessayer." 
+                  : "Processing error. Please try again.",
+              timestamp: new Date(),
+              isRetry: true
+          };
+          
+          setMessages(prev => [...prev, errorMessage]);
+          storeSession(sessionId, [...messages, userMessage, errorMessage]);
+          return;
+      } finally {
+          setIsTyping(false);
+      }
+  }
+ // Dans handleSubmit, avant l'envoi standard à Dialogflow
+if (queryText.toLowerCase().includes('statut') || queryText.toLowerCase().includes('status')) {
+  const statuses = await fetchAvailableStatuses();
   
+  if (statuses.length > 0) {
+    const statusMessage: HistoryEntry = {
+      sender: 'bot',
+      text: languageCode === 'fr' 
+        ? 'Voici les statuts disponibles pour les devis :' 
+        : 'Here are the available quotation statuses:',
+      timestamp: new Date(),
+      isStatusSelection: true,
+      availableStatuses: statuses
+    };
+
+    const updatedMessages = [...messages, userMessage, statusMessage];
+    setMessages(updatedMessages);
+    storeSession(sessionId, updatedMessages);
+    setIsTyping(false);
+    return;
+  }
+}
+
+  // Validation de la date d'échéance
+  if (isInQuotationFlow() && getCurrentStep() === 'duedate') {
+      const validation = validateDueDate(queryText.trim(), languageCode);
+      
+      if (!validation.isValid) {
+          // Message d'erreur et on reste sur la même étape
+          const errorMessage: HistoryEntry = {
+              sender: 'bot',
+              text: validation.error || (languageCode === 'fr' 
+                  ? "Date d'échéance invalide. Veuillez réessayer." 
+                  : "Invalid due date. Please try again."),
+              timestamp: new Date(),
+              isRetry: true
+          };
+          
+          const updatedMessages = [...messages, userMessage, errorMessage];
+          setMessages(updatedMessages);
+          storeSession(sessionId, updatedMessages);
+          setIsTyping(false);
+          return;
+      }
+
+      // Si validation OK, on ajoute d'abord le message utilisateur
+      const updatedMessages = [...messages, userMessage];
+      setMessages(updatedMessages);
+      storeSession(sessionId, updatedMessages);
+
+      // Puis on envoie à Dialogflow
+      try {
+          const parameters = {
+              fields: {
+                  queryText: { stringValue: queryText },
+                  currentStep: { stringValue: 'duedate' }
+              }
+          };
+
+          setIsTyping(true);
+          const response = await api.dialogflow.sendRequest({
+              languageCode,
+              queryText: queryText,
+              sessionId,
+              parameters,
+              outputContexts: currentContexts
+          });
+
+          if (response.outputContexts) {
+              setCurrentContexts(response.outputContexts);
+          }
+
+          const botMessage: HistoryEntry = {
+              sender: 'bot',
+              text: response.fulfillmentText,
+              timestamp: new Date()
+          };
+
+          setMessages(prev => [...prev, botMessage]);
+          storeSession(sessionId, [...updatedMessages, botMessage]);
+          setQueryText('');
+          return;
+      } catch (error) {
+          console.error('Dialogflow error:', error);
+          const errorMessage: HistoryEntry = {
+              sender: 'bot',
+              text: languageCode === 'fr' 
+                  ? "Erreur lors du traitement. Veuillez réessayer." 
+                  : "Processing error. Please try again.",
+              timestamp: new Date(),
+              isRetry: true
+          };
+          
+          setMessages(prev => [...prev, errorMessage]);
+          storeSession(sessionId, [...updatedMessages, errorMessage]);
+          return;
+      } finally {
+          setIsTyping(false);
+      }
+  }
+    // Si validation OK ou si ce n'est pas l'étape 'duedate', on continue
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     storeSession(sessionId, updatedMessages);
@@ -447,7 +1155,173 @@ const DialogflowTable = ({
           return;
         }
       }
+  
+      // Si c'est l'étape de sélection d'article
+      // Dans la fonction handleSubmit, modifiez la partie qui gère la sélection d'article
+// Dans la partie qui gère la sélection d'article (dans handleSubmit)
+if (isInQuotationFlow() && getCurrentStep() === 'articleId') {
+  const availableArticles = await fetchAvailableArticles();
+  
+  // Vérifier si l'ID saisi est valide
+  const selectedId = parseInt(queryText);
+  const selectedArticle = availableArticles.find(a => a.id === selectedId);
+  
+  if (isNaN(selectedId)) {
+    const errorMessage: HistoryEntry = {
+      sender: 'bot',
+      text: languageCode === 'fr' 
+        ? "Veuillez entrer un ID valide (nombre entier)" 
+        : "Please enter a valid ID (integer)",
+      timestamp: new Date(),
+      isRetry: true
+    };
 
+    setMessages(prev => [...prev, errorMessage]);
+    storeSession(sessionId, [...updatedMessages, errorMessage]);
+    setIsTyping(false);
+    return;
+  }
+
+  if (!selectedArticle) {
+    const botMessage: HistoryEntry = {
+      sender: 'bot',
+      text: languageCode === 'fr' 
+        ? "Article non disponible. Veuillez choisir parmi les articles disponibles :" 
+        : "Article not available. Please choose from available articles:",
+      timestamp: new Date(),
+      isArticleSelection: true,
+      availableArticles: availableArticles
+    };
+
+    setMessages(prev => [...prev, botMessage]);
+    storeSession(sessionId, [...updatedMessages, botMessage]);
+    setIsTyping(false);
+    return;
+  }
+
+  // Mettre à jour le stock de l'article (décrémenter de 1)
+  try {
+    await updateArticleStock(selectedId, -1);
+    
+    // Mettre à jour la liste des articles disponibles avec la nouvelle quantité
+    const updatedAvailableArticles = availableArticles.map(article => {
+      if (article.id === selectedId) {
+        return {
+          ...article,
+          quantity: article.quantity - 1 // Décrémente la quantité
+        };
+      }
+      return article;
+    });
+    const refreshArticles = async () => {
+      const refreshedArticles = await fetchAvailableArticles();
+      setMessages(prev => prev.map(msg => 
+        msg.isArticleSelection 
+          ? { ...msg, availableArticles: refreshedArticles } 
+          : msg
+      ));
+    };
+    
+    // Appelez cette fonction après chaque mise à jour de stock
+    await updateArticleStock(selectedId, -1);
+    await refreshArticles();
+
+    // Si l'ID est valide, envoyer la réponse à Dialogflow
+    const parameters = {
+      fields: {
+        queryText: { stringValue: queryText },
+        currentStep: { stringValue: 'articleId' },
+        articleId: { numberValue: selectedId },
+        quotationData: {
+          structValue: {
+            fields: {
+              articleId: { numberValue: selectedId }
+            }
+          }
+        }
+      }
+    };
+
+    const response = await api.dialogflow.sendRequest({
+      languageCode,
+      queryText: selectedId.toString(),
+      sessionId,
+      parameters,
+      outputContexts: currentContexts
+    });
+
+    if (response.outputContexts) {
+      setCurrentContexts(response.outputContexts);
+    }
+
+    const botMessage: HistoryEntry = {
+      sender: 'bot',
+      text: response.fulfillmentText || 
+        (languageCode === 'fr' 
+          ? "Article sélectionné. Veuillez entrer la quantité" 
+          : "Article selected. Please enter the quantity"),
+      timestamp: new Date(),
+      availableArticles: updatedAvailableArticles // Envoyer la liste mise à jour
+    };
+
+    setMessages(prev => [...prev, botMessage]);
+    storeSession(sessionId, [...updatedMessages, botMessage]);
+    setIsTyping(false);
+    return;
+  } catch (error) {
+    console.error("Erreur lors de la mise à jour du stock:", error);
+    const errorMessage: HistoryEntry = {
+      sender: 'bot',
+      text: languageCode === 'fr' 
+        ? "Erreur lors de la sélection de l'article. Veuillez réessayer." 
+        : "Error selecting article. Please try again.",
+      timestamp: new Date(),
+      isRetry: true
+    };
+    
+    setMessages(prev => [...prev, errorMessage]);
+    storeSession(sessionId, [...updatedMessages, errorMessage]);
+    setIsTyping(false);
+    return;
+  }
+}
+  
+      // Vérification du format QUO-XXXXXX pour le numéro séquentiel
+      if (isInQuotationFlow() && getCurrentStep() === 'sequentialNumbr') {
+        const sequentialNumber = queryText.trim();
+        
+        if (!/^QUO-\d{6}$/.test(sequentialNumber)) {
+          throw new Error(
+            languageCode === 'fr' 
+              ? "Format invalide. Le numéro de devis doit être strictement sous la forme QUO-123456 (QUO en majuscules suivi d'un tiret et exactement 6 chiffres)" 
+              : "Invalid format. The quotation number must be strictly in QUO-123456 format (QUO in uppercase followed by a hyphen and exactly 6 digits)"
+          );
+        }
+  
+        try {
+          const checkResponse = await api.expense_quotation.checkSequentialNumber(sequentialNumber);
+          if (checkResponse.exists) {
+            const errorMessage: HistoryEntry = {
+              sender: 'bot',
+              text: languageCode === 'fr'
+                ? `Le numéro ${sequentialNumber} existe déjà. Veuillez entrer un autre numéro.`
+                : `The number ${sequentialNumber} already exists. Please enter a different number.`,
+              timestamp: new Date(),
+              isRetry: true
+            };
+            
+            setMessages(prev => [...prev, errorMessage]);
+            storeSession(sessionId, [...updatedMessages, errorMessage]);
+            setIsTyping(false);
+            return;
+          }
+        } catch (error) {
+          console.error('Error checking quotation number:', error);
+          // Continuer malgré l'erreur de vérification
+        }
+      }
+  
+      // Envoi standard à Dialogflow pour les autres cas
       const parameters: any = {
         fields: {
           queryText: { stringValue: queryText }
@@ -458,10 +1332,7 @@ const DialogflowTable = ({
         parameters.fields.currentStep = { stringValue: getCurrentStep() };
         
         if (getCurrentStep() === 'sequentialNumbr') {
-          if (!/^QUO-\d{6}$/.test(queryText)) {
-            throw new Error("Format invalide. Le numéro doit être sous la forme QUO-123456");
-          }
-          parameters.fields.quotationNumber = { stringValue: queryText };
+          parameters.fields.quotationNumber = { stringValue: queryText.trim().toUpperCase() };
         }
       }
   
@@ -489,7 +1360,13 @@ const DialogflowTable = ({
   
     } catch (error) {
       console.error('Error:', error);
-      storeSession(sessionId, [...updatedMessages]);
+      const errorMessage: HistoryEntry = {
+        sender: 'bot',
+        text: error instanceof Error ? error.message : String(error),
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+      storeSession(sessionId, [...updatedMessages, errorMessage]);
     } finally {
       setIsTyping(false);
     }
@@ -627,8 +1504,188 @@ const DialogflowTable = ({
 
       {/* Messages container */}
       <div className="flex-1 p-4 overflow-y-auto bg-gray-50">
-        <div className="space-y-3">
-          {messages.map((msg, index) => {
+  <div className="space-y-3">
+    {messages.map((msg, index) => {
+      // Affichage de la sélection d'articles (existant)
+      // Dans le JSX, modifiez la partie qui affiche les articles
+     // Dans le JSX, modifiez la partie qui affiche les articles
+if (msg.isArticleSelection && msg.availableArticles) {
+  return (
+    <div key={index} className="flex justify-start">
+      <Avatar className="h-8 w-8 mt-1 mr-2">
+        <AvatarImage src="/bot-avatar.png" />
+        <AvatarFallback>AI</AvatarFallback>
+      </Avatar>
+      <div className="max-w-[80%]">
+        <div className="bg-white border rounded-lg px-4 py-2 rounded-tl-none">
+          <div className="text-sm mb-2">{msg.text}</div>
+          <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2">
+            {msg.availableArticles.map(article => (
+              <Button
+              key={article.id}
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              disabled={article.quantity <= 0} // Désactive si quantité insuffisante
+              onClick={async () => {
+                try {
+                  const availability = await checkArticleAvailability(article.id, 1);
+                  if (!availability.available) {
+                    // Afficher message d'erreur
+                    return;
+                  }
+            
+                  // Mettre à jour le stock
+                  const updatedArticle = await updateArticleStock(article.id, -1);
+                  
+                  // Mettre à jour l'UI
+                  const newAvailableArticles = msg.availableArticles?.map(a => 
+                    a.id === article.id 
+                      ? { ...a, quantity: updatedArticle.quantityInStock }
+                      : a
+                  );
+            
+                  // Créer un nouveau message avec les quantités mises à jour
+                  const updatedMessage = {
+                    ...msg,
+                    availableArticles: newAvailableArticles
+                  };
+            
+                  // Mettre à jour les messages
+                  setMessages(prev => prev.map(m => m === msg ? updatedMessage : m));
+                  
+                  // Sélectionner l'article
+                  setQueryText(article.id.toString());
+                  const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                  handleSubmit(fakeEvent);
+                } catch (error) {
+                  console.error("Erreur:", error);
+                  // Afficher message d'erreur
+                }
+              }}
+            >
+              {article.id} ({languageCode === 'fr' ? 'Dispo' : 'Avail'}: {article.quantity})
+            </Button>
+            ))}
+          </div>
+          <div className="text-xs mt-2 text-right text-gray-500">
+            {formatTime(msg.timestamp)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+      // Nouveau: Affichage de la sélection de firms
+      if (msg.isFirmSelection && msg.availableFirms) {
+        return (
+          <div key={index} className="flex justify-start">
+            <Avatar className="h-8 w-8 mt-1 mr-2">
+              <AvatarImage src="/bot-avatar.png" />
+              <AvatarFallback>AI</AvatarFallback>
+            </Avatar>
+            <div className="max-w-[80%]">
+              <div className="bg-white border rounded-lg px-4 py-2 rounded-tl-none">
+                <div className="text-sm mb-2">{msg.text}</div>
+                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2">
+                  {msg.availableFirms.map((firm, firmIndex) => (
+                    <Button
+                      key={`${firm}-${firmIndex}`}
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => {
+                        setQueryText(firm);
+                        const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                        handleSubmit(fakeEvent);
+                      }}
+                    >
+                      {firm}
+                    </Button>
+                  ))}
+                </div>
+                <div className="text-xs mt-2 text-right text-gray-500">
+                  {formatTime(msg.timestamp)}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+      // Dans le JSX, avec les autres conditions de rendu
+// Dans le JSX, avec les autres conditions de rendu
+if (msg.isStatusSelection && msg.availableStatuses) {
+  return (
+    <div key={index} className="flex justify-start">
+      <Avatar className="h-8 w-8 mt-1 mr-2">
+        <AvatarImage src="/bot-avatar.png" />
+        <AvatarFallback>AI</AvatarFallback>
+      </Avatar>
+      <div className="max-w-[80%]">
+        <div className="bg-white border rounded-lg px-4 py-2 rounded-tl-none">
+          <div className="text-sm mb-2">{msg.text}</div>
+          <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2">
+            {msg.availableStatuses.map((status, statusIndex) => (
+              <Button
+                key={`${status.value}-${statusIndex}`}
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                onClick={() => {
+                  setQueryText(status.value); // Envoie la valeur au backend
+                  const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                  handleSubmit(fakeEvent);
+                }}
+              >
+                {status.label} {/* Affiche le label traduit */}
+              </Button>
+            ))}
+          </div>
+          <div className="text-xs mt-2 text-right text-gray-500">
+            {formatTime(msg.timestamp)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+// Ajoutez ce bloc avec les autres conditions de rendu
+if (msg.isCurrencySelection && msg.availableCurrencies) {
+  return (
+    <div key={index} className="flex justify-start">
+      <Avatar className="h-8 w-8 mt-1 mr-2">
+        <AvatarImage src="/bot-avatar.png" />
+        <AvatarFallback>AI</AvatarFallback>
+      </Avatar>
+      <div className="max-w-[80%]">
+        <div className="bg-white border rounded-lg px-4 py-2 rounded-tl-none">
+          <div className="text-sm mb-2">{msg.text}</div>
+          <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2">
+            {msg.availableCurrencies.map((currency, currencyIndex) => (
+              <Button
+                key={`${currency}-${currencyIndex}`}
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                onClick={() => {
+                  setQueryText(currency);
+                  const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                  handleSubmit(fakeEvent);
+                }}
+              >
+                {currency}
+              </Button>
+            ))}
+          </div>
+          <div className="text-xs mt-2 text-right text-gray-500">
+            {formatTime(msg.timestamp)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
             const isComparisonMessage = msg.text.includes('Comparaison pour') || 
                                       msg.text.includes('Comparison for');
             
@@ -759,26 +1816,58 @@ const DialogflowTable = ({
 
       {/* Input area */}
       <form onSubmit={handleSubmit} className="p-3 border-t bg-white">
-        <div className="flex gap-2">
-          <Input
-            type="text"
-            value={queryText}
-            onChange={(e) => setQueryText(e.target.value)}
-            placeholder={getInputPlaceholder()}
-            className="flex-1 rounded-full"
-          />
-          <Button 
-            type="submit" 
-            className="rounded-full w-12 h-12 p-0"
-            disabled={!queryText.trim()}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"></line>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-            </svg>
-          </Button>
-        </div>
-      </form>
+  <div className="flex gap-2">
+    {isInQuotationFlow() && getCurrentStep() === 'unitPrice' ? (
+      <div className="flex gap-2 w-full">
+        <Input
+          type="text"
+          value={queryText}
+          onChange={(e) => setQueryText(e.target.value)}
+          placeholder={getInputPlaceholder()}
+          className="flex-1 rounded-full"
+        />
+        <Select 
+          value={selectedCurrency}
+          onValueChange={(value) => setSelectedCurrency(value)}
+        >
+          <SelectTrigger className="w-[100px]">
+            <SelectValue placeholder="Devise" />
+          </SelectTrigger>
+          <SelectContent>
+            {['EUR', 'USD', 'GBP', 'JPY'].map((currency) => (
+              <SelectItem key={currency} value={currency}>
+                {currency}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    ) : (
+      <Input
+        type="text"
+        value={queryText}
+        onChange={(e) => {
+          const val = isInQuotationFlow() && getCurrentStep() === 'sequentialNumbr' 
+            ? e.target.value.toUpperCase() 
+            : e.target.value;
+          setQueryText(val);
+        }}
+        placeholder={getInputPlaceholder()}
+        className="flex-1 rounded-full"
+      />
+    )}
+    <Button 
+      type="submit" 
+      className="rounded-full w-12 h-12 p-0"
+      disabled={!queryText.trim()}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"></line>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+      </svg>
+    </Button>
+  </div>
+</form>
 
       {/* History Modal */}
       {showHistory && (

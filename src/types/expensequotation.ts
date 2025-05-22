@@ -12,8 +12,8 @@ import { Tax } from './tax';
 import { Upload } from './upload';
 
 export enum EXPENSQUOTATION_STATUS {
-  Expired = 'expense_quotation.status.expired',
-  Draft = 'expense_quotation.status.draft',
+  Expired = 'expired',
+  Draft = 'draft',
 }
 
 export interface ExpenseQuotationMetaData extends DatabaseEntity {

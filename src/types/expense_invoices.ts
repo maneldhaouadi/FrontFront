@@ -13,13 +13,12 @@ import { TaxWithholding } from './tax-withholding';
 import { Upload } from './upload';
 
 export enum EXPENSE_INVOICE_STATUS {
-  Nonexistent = 'expense_invoice.status.non_existent',
-  Draft = 'expense_invoice.status.draft',
-  Validated = 'expense_invoice.status.validated',
-  Paid = 'expense_invoice.status.paid',
-  PartiallyPaid = 'expense_invoice.status.partially_paid',
-  Unpaid = 'expense_invoice.status.unpaid',
-  Expired = 'expense_invoice.status.expired',
+  Draft = 'draft',
+  Validated = 'validated',
+  Paid = 'paid',
+  PartiallyPaid = 'partially_paid',
+  Unpaid = 'unpaid',
+  Expired = 'expired',
 }
 
 export interface ExpenseInvoiceTaxEntry extends DatabaseEntity {
@@ -151,6 +150,7 @@ export interface ExpenseUpdateInvoiceDto extends ExpenseCreateInvoiceDto {
 export interface ExpenseDuplicateInvoiceDto {
   id?: number;
   includeFiles?: boolean;
+  generateNewReferences?: boolean; // Nouveau paramètre
 }
 
 export interface ExpensePagedInvoice extends PagedResponse<ExpenseInvoice> {}

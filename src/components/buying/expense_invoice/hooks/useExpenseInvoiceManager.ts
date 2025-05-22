@@ -98,7 +98,7 @@ const initialState: Omit<ExpenseInvoiceManager, 'set' | 'reset' | 'setFirm' | 's
   bankAccount: api?.bankAccount?.factory() || undefined,
   currency: api?.currency?.factory() || undefined,
   notes: '',
-  status: EXPENSE_INVOICE_STATUS.Nonexistent,
+  status: EXPENSE_INVOICE_STATUS.Draft,
   generalConditions: '',
   isInterlocutorInFirm: false,
   uploadedFiles: [], // Fichiers supplémentaires

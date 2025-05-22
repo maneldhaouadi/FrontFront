@@ -121,34 +121,59 @@ export const ExpenseInvoiceArticleItem: React.FC<ExpenseInvoiceArticleItemProps>
   };
 
 // Ajoutez cette fonction pour générer une référence automatique
-const generateReference = () => {
-  const randomNumber = Math.floor(100000000 + Math.random() * 900000000);
-  const generatedReference = `REF-${randomNumber}`;
-  
-  const newArticle = {
-    id: 0,
-    title: article.article?.title || '',
-    description: article.article?.description || '',
-    reference: generatedReference,
-    quantityInStock: article.quantity || 0, // Quantité actuelle
-    status: 'draft',
-    version: 0,
-    unitPrice: article.unit_price || 0, // Prix unitaire actuel
-    notes: '',
-    isDeletionRestricted: false
-  };
+// Modifiez la fonction generateReference comme ceci :
+const generateReference = async () => {
+  let generatedReference = '';
+  let referenceExists = true;
+  let attempts = 0;
+  const maxAttempts = 5;
+
+  // Génère une référence unique
+  while (referenceExists && attempts < maxAttempts) {
+    const timestamp = Date.now().toString().slice(-6);
+    const randomNum = Math.floor(100 + Math.random() * 900);
+    generatedReference = `REF-${timestamp}-${randomNum}`;
+
+    try {
+      const response = await api.article.findOneByReference(generatedReference);
+      referenceExists = !!response;
+      attempts++;
+    } catch (error) {
+      referenceExists = false; // En cas d'erreur, on considère que la référence est disponible
+    }
+  }
+
+  if (referenceExists) {
+    toast.error(tInvoicing('article.errors.generation_failed'));
+    return;
+  }
 
   onChange({
     ...article,
-    article: newArticle
-  });
-};
-const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  onChange({
-    ...article,
+    reference: generatedReference,
     article: {
       ...(article.article || {
         id: 0,
+        title: '',
+        description: '',
+        quantityInStock: 0,
+        status: 'draft',
+        version: 0,
+        unitPrice: 0,
+        notes: '',
+        isDeletionRestricted: false
+      }),
+      reference: generatedReference
+    }
+  });
+};
+
+const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const updatedArticle = {
+    ...article,
+    article: {
+      ...(article.article || {
+        id: 0, // Toujours fournir un ID par défaut
         title: '',
         description: '',
         reference: '',
@@ -159,9 +184,12 @@ const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         notes: '',
         isDeletionRestricted: false
       }),
-      title: e.target.value
-    }
-  });
+      title: e.target.value,
+      version: (article.article?.version || 0) + 1
+    },
+    updatedAt: new Date().toISOString()
+  };
+  onChange(updatedArticle);
 };
 
   const handleSelectArticle = async (value: string) => {
@@ -229,25 +257,28 @@ const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
   };
   
   const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onChange({
-      ...article,
-      article: {
-        ...(article.article || {
-          id: 0,
-          title: '',
-          description: '',
-          reference: '',
-          quantityInStock: 0,
-          status: 'draft',
-          version: 0,
-          unitPrice: 0,
-          notes: '',
-          isDeletionRestricted: false
-        }),
-        description: e.target.value
-      }
-    });
+  const updatedArticle = {
+    ...article,
+    article: {
+      ...(article.article || {
+        id: 0, // Toujours fournir un ID par défaut
+        title: '',
+        description: '',
+        reference: '',
+        quantityInStock: 0,
+        status: 'draft',
+        version: 0,
+        unitPrice: 0,
+        notes: '',
+        isDeletionRestricted: false
+      }),
+      description: e.target.value,
+      version: (article.article?.version || 0) + 1
+    },
+    updatedAt: new Date().toISOString()
   };
+  onChange(updatedArticle);
+};
   const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const quantity = e.target.value;
     const regex = new RegExp(`^\\d*(\\.\\d{0,${digitAfterComma}})?$`);
@@ -257,7 +288,7 @@ const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       
       // Vérifier si la quantité demandée est disponible
       if (availableQuantity !== null && quantityNum > availableQuantity) {
-        toast.error(tInvoicing('article.errors.insufficient_quantity', {
+        toast.error(tInvoicing('quantité insuffisante', {
           available: availableQuantity,
           requested: quantityNum
         }));
@@ -373,78 +404,83 @@ const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     />
   </div>
   {loading ? (
-    <SelectItem value="loading" disabled>
-      {tInvoicing('Loading...')}
-    </SelectItem>
-  ) : articles.length > 0 ? (
-    articles
-      .filter(article => 
-        article?.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (article.reference && article.reference.toLowerCase().includes(searchQuery.toLowerCase()))
-      )
-      .map((art) => (
-        <SelectItem 
-          key={art.id} 
-          value={art.id.toString()}
-          disabled={art.quantityInStock <= 0} // Désactiver si quantité <= 0
-          className={art.quantityInStock <= 0 ? 'opacity-50 cursor-not-allowed' : ''}
-        >
-          <div className="flex justify-between items-center">
-            <span>
-              {art.title} {art.reference ? `(${art.reference})` : ''}
-            </span>
-            <span className="text-xs text-muted-foreground ml-2">
-              {art.quantityInStock <= 0 ? 
-                tInvoicing('out_of_stock') : 
-                `${art.quantityInStock} ${tInvoicing('available')}`
-              }
-            </span>
-          </div>
-        </SelectItem>
-      ))
-  ) : (
-    <SelectItem value="no-articles" disabled>
-      {tInvoicing('No articles available')}
-    </SelectItem>
-  )}
+  <SelectItem value="loading" disabled>
+    {tInvoicing('Loading...')}
+  </SelectItem>
+) : articles.length > 0 ? (
+  articles
+    .filter(article => 
+      article?.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (article.reference && article.reference.toLowerCase().includes(searchQuery.toLowerCase()))
+    )
+    .map((art) => (
+      <SelectItem 
+        key={art.id} 
+        value={art.id.toString()}
+        disabled={art.quantityInStock <= 0}
+        className={art.quantityInStock <= 0 ? 'opacity-50 cursor-not-allowed' : ''}
+      >
+        <div className="flex justify-between items-center">
+          <span>
+            {art.title} {art.reference ? `(${art.reference})` : ''}
+          </span>
+          <span className="text-xs text-muted-foreground ml-2">
+            {art.quantityInStock <= 0 ? 
+              tInvoicing('out_of_stock') : 
+              `${art.quantityInStock} ${tInvoicing('available')}`
+            }
+          </span>
+        </div>
+      </SelectItem>
+    ))
+) : (
+  <SelectItem value="no-articles" disabled>
+    {tInvoicing('No articles available')}
+  </SelectItem>
+)}
 </SelectContent>
-        </Select>
-      ) : (
-        <>
-          <Input
-            placeholder={tInvoicing('Enter a title')}
-            value={article.article?.title}
-            onChange={handleTitleChange}
-          />
-          {/* Ajoutez le champ référence ici */}
-          <div className="flex gap-2">
-            <Input
-              placeholder={tInvoicing('reference')}
-              value={article.article?.reference || ''}
-              onChange={handleReferenceChange}
-              pattern="^REF-\d{9}$"
-              title="Format: REF- suivis de 9 chiffres"
-            />
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={generateReference}
-              className="whitespace-nowrap"
-            >
-              {tInvoicing('generate_reference')}
-            </Button>
-          </div>
-        </>
-      )}
-    </div>
-  ) : (
-    <div className="flex flex-col gap-2">
-      <UneditableInput value={article.article?.title} />
-      {article.article?.reference && (
-        <UneditableInput value={article.article.reference} />
-      )}
-    </div>
-  )}
+</Select>
+) : (
+<>
+  <Input
+    placeholder={tInvoicing('Enter a title')}
+    value={article.article?.title || ''}
+    onChange={handleTitleChange}
+  />
+  
+  {/* Champ référence corrigé */}
+  <div className="flex gap-2 mt-2">
+  <div className="flex-1">
+    <Input
+      placeholder={tInvoicing('reference')}
+      value={article.reference || ''}
+      onChange={handleReferenceChange}
+      pattern="^REF-\d{6}-\d{3}$"
+      title={tInvoicing('article.errors.invalid_reference_format')}
+    />
+  </div>
+  <Button 
+    type="button"
+    variant="outline"
+    onClick={generateReference}
+    className="whitespace-nowrap"
+    disabled={!!article.article?.id}
+  >
+    {tInvoicing('generate_reference')}
+  </Button>
+</div>
+</>
+)}
+</div>
+) : (
+<div className="flex flex-col gap-2">
+  <UneditableInput value={article.article?.title || ''} />
+  <UneditableInput 
+    value={article.reference || tInvoicing('no_reference')}
+    placeholder={tInvoicing('no_reference')}
+  />
+</div>
+)}
 </div>
           {/* Quantity */}
           <div className="w-1/5">

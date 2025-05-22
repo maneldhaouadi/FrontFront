@@ -42,22 +42,26 @@ export const getPaymentColumns = (t: Function, tCurrency: Function): ColumnDef<E
       enableHiding: true
     },
     {
-      accessorKey: 'mode',
-      header: ({ column }) => (
-        <DataTableColumnHeader
-          column={column}
-          title={translate('payment.attributes.mode')}
-          attribute={EXPENSE_PAYMENT_FILTER_ATTRIBUTES.MODE}
-        />
-      ),
-      cell: ({ row }) => (
-        <div>
-          <Badge className="px-4 py-1">{t(row.original?.mode || '')}</Badge>
-        </div>
-      ),
-      enableSorting: true,
-      enableHiding: true
-    },
+  accessorKey: 'mode',
+  header: ({ column }) => (
+    <DataTableColumnHeader
+      column={column}
+      title={translate('payment.attributes.mode')}
+      attribute={EXPENSE_PAYMENT_FILTER_ATTRIBUTES.MODE}
+    />
+  ),
+  cell: ({ row }) => (
+    <div>
+      <Badge className="px-7 py-1 w-40 text-center truncate">
+        {t(row.original?.mode || '')}
+      </Badge>
+    </div>
+  ),
+  enableSorting: true,
+  enableHiding: true
+},
+
+
     {
       accessorKey: 'amount',
       header: ({ column }) => (

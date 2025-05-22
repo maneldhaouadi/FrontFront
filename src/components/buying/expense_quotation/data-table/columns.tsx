@@ -114,41 +114,44 @@ export const getQuotationColumns = (
       enableSorting: true,
       enableHiding: true
     },
-    {
-      accessorKey: 'status',
-      header: ({ column }) => (
-        <DataTableColumnHeader
-          column={column}
-          title={translate('quotation.attributes.status')}
-          attribute={EXPENSE_QUOTATION_FILTER_ATTRIBUTES.STATUS}
-        />
-      ),
-      cell: ({ row }) => (
-        <div>
-          <Badge className="px-4 py-1">{t(row.original?.status || '')}</Badge>
-        </div>
-      ),
-      enableSorting: true,
-      enableHiding: true
-    },
-    {
-      accessorKey: 'total',
-      header: ({ column }) => (
-        <DataTableColumnHeader
-          column={column}
-          title={translate('quotation.attributes.total')}
-          attribute={EXPENSE_QUOTATION_FILTER_ATTRIBUTES.TOTAL}
-        />
-      ),
-      cell: ({ row }) => (
-        <div>
-          {row.original?.total?.toFixed(row.original?.currency?.digitAfterComma)}{' '}
-          {row.original?.currency?.symbol}
-        </div>
-      ),
-      enableSorting: true,
-      enableHiding: true
-    },
+  {
+  accessorKey: 'status',
+  header: ({ column }) => (
+    <DataTableColumnHeader
+      column={column}
+      title={translate('quotation.attributes.status')}
+      attribute={EXPENSE_QUOTATION_FILTER_ATTRIBUTES.STATUS}
+    />
+  ),
+  cell: ({ row }) => {
+    const status = row.original?.status || '';
+    const statusClasses = {
+      Draft: 'bg-gray-100 text-gray-800 border-gray-300',
+      Expired: 'bg-amber-100 text-amber-800 border-amber-300',
+    };
+
+    return (
+      <div className=" justify-center">
+        <Badge 
+          className={` 
+            flex items-center justify-center 
+            min-w-[60px] max-w-[700px]  // Largeur légèrement augmentée
+            h-8  // Hauteur conservée
+            rounded-full 
+            text-sm font-medium 
+            border
+            ${statusClasses[status as keyof typeof statusClasses]}
+            mx-auto
+          `}
+        >
+          <span className="truncate">{t(status)}</span>
+        </Badge>
+      </div>
+    );
+  },
+  enableSorting: true,
+  enableHiding: true
+},
     {
       accessorKey: 'created_at',
       header: ({ column }) => (

@@ -6,7 +6,6 @@ import {
 } from '@/components/ui/accordion';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
-import { Invoice } from '@/types';
 import { ExpenseInvoice } from '@/types/expense_invoices';
 import Link from 'next/link';
 import { useTranslation } from 'react-i18next';

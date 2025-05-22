@@ -176,33 +176,27 @@ export const ExpenseInvoiceMain: React.FC<ExpenseInvoiceMainProps> = ({ classNam
 
 
   //Duplicate Invoice
-  const { mutate: duplicateInvoice, isPending: isDuplicationPending } = useMutation({
-    mutationFn: ({ id, includeFiles }: { id: number; includeFiles: boolean }) => {
-      return api.expense_invoice.duplicate({ id, includeFiles });
-    },
-    onSuccess: async (data, variables) => {
-      // Réinitialiser complètement le manager avant mise à jour
-      invoiceManager.reset();
-      
-      // Mettre à jour avec toutes les données
-      invoiceManager.set({
-        ...data,
-        // Forcer la suppression des fichiers si includeFiles=false
-        uploadPdfField: variables.includeFiles ? data.uploadPdfField : null,
-        uploadedFiles: variables.includeFiles ? data.uploads || [] : []
-      });
-  
-      toast.success(tInvoicing('expense_invoice.action_duplicate_success'));
-      await router.push('/buying/expense_invoice/' + data.id);
-      setDuplicateDialog(false);
-    },
-    onError: (error) => {
-      toast.error(
-        getErrorMessage('invoicing', error, tInvoicing('expense_invoice.action_duplicate_failure'))
-      );
-    },
-  });
-
+  //Duplicate Invoice
+const { mutate: duplicateInvoice, isPending: isDuplicationPending } = useMutation({
+  mutationFn: (duplicateParams: { id: number, includeFiles: boolean }) => {
+    return api.expense_invoice.duplicate({ 
+      id: duplicateParams.id, 
+      includeFiles: duplicateParams.includeFiles 
+    });
+  },
+  onSuccess: async (data) => {
+    invoiceManager.reset();
+    invoiceManager.set(data);
+    toast.success(tInvoicing('expense_invoice.action_duplicate_success'));
+    await router.push('/buying/expense_invoice/' + data.id);
+    setDuplicateDialog(false);
+  },
+  onError: (error) => {
+    toast.error(
+      getErrorMessage('invoicing', error, tInvoicing('expense_invoice.action_duplicate_failure'))
+    );
+  },
+});
   const isPending = isFetchPending || isDeletePending || paging || resizing || searching || sorting;
 
   if (error) return 'An error has occurred: ' + error.message;
@@ -219,18 +213,17 @@ export const ExpenseInvoiceMain: React.FC<ExpenseInvoiceMainProps> = ({ classNam
         onClose={() => setDeleteDialog(false)}
       />
       <ExpenseInvoiceDuplicateDialog
-        id={invoiceManager?.id || 0}
-        open={duplicateDialog}
-        duplicateInvoice={(includeFiles: boolean) => {
-          invoiceManager?.id &&
-            duplicateInvoice({
-              id: invoiceManager?.id,
-              includeFiles: includeFiles
-            });
-        }}
-        isDuplicationPending={isDuplicationPending}
-        onClose={() => setDuplicateDialog(false)}
-      />
+  id={invoiceManager?.id || 0}
+  open={duplicateDialog}
+  duplicateInvoice={(includeFiles) => {  // Modifiez cette ligne
+    invoiceManager?.id && duplicateInvoice({ 
+      id: invoiceManager.id, 
+      includeFiles  // Utilisez la valeur passée depuis le dialogue
+    });
+  }}
+  isDuplicationPending={isDuplicationPending}
+  onClose={() => setDuplicateDialog(false)}
+/>
        
        <ExpenseInvoiceDownloadDialog
         id={invoiceManager?.id || 0}

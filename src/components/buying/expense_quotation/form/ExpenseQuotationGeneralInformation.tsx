@@ -349,17 +349,28 @@ export const ExpenseQuotationGeneralInformation = ({
   </Label>
   {edit && !isInspectMode ? (
     <div className="relative">
-      <Input
-        className={cn(
-          "w-full h-8",
-          quotationManager.errors?.sequentialNumbr && 
-          "border-red-500 focus-visible:ring-red-500"
-        )}
-        placeholder="Format: QUO-12345"
-        value={quotationManager.sequentialNumbr || ''}
-        onChange={handleSequentialNumberChange}
-        isPending={isValidating || loading}
-      />
+      <div className="flex items-center">
+        <span className="inline-flex items-center h-8 px-3 text-sm border border-r-0 rounded-l-md bg-gray-50 text-gray-500 border-gray-300">
+          QUO-
+        </span>
+        <Input
+          className={cn(
+            "w-full h-8 rounded-l-none",
+            quotationManager.errors?.sequentialNumbr && 
+            "border-red-500 focus-visible:ring-red-500"
+          )}
+          placeholder="12345"
+          value={quotationManager.sequentialNumbr?.replace('QUO-', '') || ''}
+          onChange={(e) => {
+            // N'autoriser que les chiffres
+            const numericValue = e.target.value.replace(/[^0-9]/g, '');
+            handleSequentialNumberChange({
+              target: { value: `QUO-${numericValue}` }
+            } as React.ChangeEvent<HTMLInputElement>);
+          }}
+          isPending={isValidating || loading}
+        />
+      </div>
       {/* Afficher le message d'erreur sous le champ */}
       {quotationManager.errors?.sequentialNumbr && (
         <p className="text-xs text-red-500 mt-1 animate-fade-in">

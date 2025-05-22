@@ -200,20 +200,7 @@ const [isDownloadPending, setIsDownloadPending] = React.useState(false);
       console.error('Erreur:', error);
     }
   });
-  //Invoice quotation
-  const { mutate: invoiceQuotation, isPending: isInvoicingPending } = useMutation({
-    mutationFn: (data: { id?: number; createInvoice: boolean }) =>
-      api.expense_quotation.invoice(data.id, data.createInvoice),
-    onSuccess: (data) => {
-      toast.success('Devis facturé avec succès');
-      refetchQuotations();
-      router.push(`/buying/invoice/${data.invoices[data?.invoices?.length - 1].id}`);
-    },
-    onError: (error) => {
-      const message = getErrorMessage('contacts', error, 'Erreur lors de la facturation de devis');
-      toast.error(message);
-    }
-  });
+  
 
   const isPending =
     isFetchPending ||
@@ -262,17 +249,6 @@ const [isDownloadPending, setIsDownloadPending] = React.useState(false);
   }}
   isDuplicationPending={isDuplicationPending}
 />
-      <ExpenseQuotationInvoiceDialog
-        id={quotationManager?.id || 0}
-        status={quotationManager?.status}
-        sequential={quotationManager?.sequential}
-        open={invoiceDialog}
-        isInvoicePending={isInvoicingPending}
-        invoice={(id: number, createInvoice: boolean) => {
-          invoiceQuotation({ id, createInvoice });
-        }}
-        onClose={() => setInvoiceDialog(false)}
-      />
       <ExpenseQuotationDownloadDialog
   id={quotationManager?.id || 0}
   open={downloadDialog} // Doit être true quand on clique

@@ -297,69 +297,34 @@ const onSubmit = async () => {
   try {
     // 1. Préparer les données des factures
     const invoiceEntries = invoiceManager
-      .getInvoices()
-      .map((invoice: ExpensePaymentInvoiceEntry) => {
-        // Validation des données de base
-        if (!invoice?.expenseInvoice?.id) {
-          throw new Error('Facture invalide: ID manquant');
-        }
+    .getInvoices()
+    .map((invoice: ExpensePaymentInvoiceEntry) => {
+      const invoiceCurrencyId = invoice.expenseInvoice?.currency?.id;
+      const paymentCurrencyId = paymentManager.currencyId;
+      const isSameCurrency = invoiceCurrencyId === paymentCurrencyId;
 
-        const invoiceCurrencyId = invoice.expenseInvoice.currency?.id;
-        const paymentCurrencyId = paymentManager.currencyId;
-        
-        if (!paymentCurrencyId) {
-          throw new Error('La devise du paiement doit être définie');
-        }
-
-        const isSameCurrency = invoiceCurrencyId === paymentCurrencyId;
-
-        // Calcul des montants avec protection contre les valeurs nulles
-        const invoiceTotal = Number(invoice.expenseInvoice.total) || 0;
-        const amountPaid = Number(invoice.expenseInvoice.amountPaid) || 0;
-        const taxWithholding = Number(invoice.expenseInvoice.taxWithholdingAmount) || 0;
-        const remainingAmount = Math.max(0, invoiceTotal - amountPaid - taxWithholding);
-
-        // Détermination du montant à payer
-        const amountToPay = Math.max(
-          0,
-          Math.min(
-            Number(invoice.amount) || Number(invoice.originalAmount) || remainingAmount,
-            remainingAmount
-          )
-        );
-
-        // Debug log
-        console.log('Payment calculation:', {
-          invoiceId: invoice.expenseInvoice.id,
-          invoiceAmount: invoice.amount,
-          originalAmount: invoice.originalAmount,
-          remainingAmount,
-          amountToPay
-        });
-
-        if (amountToPay <= 0) {
-          throw new Error(`Veuillez saisir un montant valide pour la facture ${invoice.expenseInvoice.id || invoice.expenseInvoice.id}`);
-        }
-
-        return {
-          expenseInvoiceId: invoice.expenseInvoice.id,
-          amount: isSameCurrency 
-            ? amountToPay 
-            : (Number(invoice.originalAmount) || amountToPay) * (Number(invoice.exchangeRate) || 1),
-          originalAmount: isSameCurrency ? amountToPay : (Number(invoice.originalAmount) || amountToPay),
-          exchangeRate: isSameCurrency ? undefined : (Number(invoice.exchangeRate) || 1),
-          originalCurrencyId: isSameCurrency ? undefined : paymentCurrencyId,
-          digitAfterComma: invoice.expenseInvoice.currency?.digitAfterComma || 2
-        };
+      return {
+        expenseInvoiceId: invoice.expenseInvoice?.id,
+        amount: isSameCurrency
+          ? invoice.amount
+          : (invoice.amount ?? 0 / (invoice.exchangeRate || 1)), // Conversion TND→EUR
+        originalAmount: invoice.amount,
+        exchangeRate: isSameCurrency ? undefined : invoice.exchangeRate,
+        originalCurrencyId: isSameCurrency ? undefined : paymentCurrencyId,
+        digitAfterComma: invoice.expenseInvoice?.currency?.digitAfterComma
+      };
       })
-      .filter(entry => entry.amount > 0 && entry.expenseInvoiceId);
+      .filter(entry => entry.amount ||  0 > 0 && entry.expenseInvoiceId);
 
     if (invoiceEntries.length === 0) {
       throw new Error('Aucune facture valide avec montant positif');
     }
 
-    // 2. Calcul du montant total
-    const totalAmount = invoiceEntries.reduce((sum, entry) => sum + (entry.originalAmount || entry.amount), 0);
+    // 2. Calcul du montant total du paiement
+    const totalAmount = invoiceEntries.reduce(
+      (sum, entry) => sum + (entry.originalAmount || entry.amount),
+      0
+    );
 
     // 3. Préparation des données du paiement
     const paymentData: ExpenseUpdatePaymentDto = {
@@ -380,17 +345,13 @@ const onSubmit = async () => {
     // 4. Envoi de la requête
     await updatePayment({
       payment: paymentData,
-    });
-
+      files: [] // Tableau vide si aucun fichier n'est uploadé
+    })
     toast.success('Paiement mis à jour avec succès');
     router.push('/buying/expense_payments');
 
   } catch (error) {
-    console.error('Erreur de mise à jour:', {
-      error,
-      invoices: invoiceManager.getInvoices(),
-      payment: paymentManager.getPayment()
-    });
+    console.error('Erreur de mise à jour:', error);
     toast.error(error instanceof Error ? error.message : 'Erreur lors de la mise à jour');
   }
 };

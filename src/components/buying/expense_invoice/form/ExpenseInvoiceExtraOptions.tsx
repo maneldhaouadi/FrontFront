@@ -64,7 +64,7 @@ export const ExpenseInvoiceExtraOptions = ({
         <AccordionTrigger>
           <div className="flex gap-2 justify-center items-center">
             <Files />
-            <Label>additional_files</Label>
+            <Label>Pièces jointes</Label>
           </div>
         </AccordionTrigger>
         <AccordionContent className="m-5">

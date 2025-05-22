@@ -115,40 +115,25 @@ export const getInvoiceColumns = (
       enableHiding: true
     },
     {
-      accessorKey: 'status',
-      header: ({ column }) => (
-        <DataTableColumnHeader
-          column={column}
-          title={translate('invoice.attributes.status')}
-          attribute={EXPENSE_INVOICE_FILTER_ATTRIBUTES.STATUS}
-        />
-      ),
-      cell: ({ row }) => (
-        <div>
-          <Badge className="px-4 py-1">{t(row.original?.status || '')}</Badge>
-        </div>
-      ),
-      enableSorting: true,
-      enableHiding: true
-    },
-    {
-      accessorKey: 'total',
-      header: ({ column }) => (
-        <DataTableColumnHeader
-          column={column}
-          title={translate('invoice.attributes.total')}
-          attribute={EXPENSE_INVOICE_FILTER_ATTRIBUTES.TOTAL}
-        />
-      ),
-      cell: ({ row }) => (
-        <div>
-          {row.original?.total?.toFixed(row.original?.currency?.digitAfterComma)}{' '}
-          {row.original?.currency?.symbol}
-        </div>
-      ),
-      enableSorting: true,
-      enableHiding: true
-    },
+  accessorKey: 'status',
+  header: ({ column }) => (
+    <DataTableColumnHeader
+      column={column}
+      title={translate('invoice.attributes.status')}
+      attribute={EXPENSE_INVOICE_FILTER_ATTRIBUTES.STATUS}
+    />
+  ),
+  cell: ({ row }) => (
+    <div className="flex justify-center">
+      <Badge className="min-w-[150px] h-8 px-4 py-1 text-sm flex items-center justify-center">
+        {t(row.original?.status || '')}
+      </Badge>
+    </div>
+  ),
+  enableSorting: true,
+  enableHiding: true
+},
+
     {
       accessorKey: 'amount_paid',
       header: ({ column }) => (

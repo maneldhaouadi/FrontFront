@@ -333,7 +333,7 @@ export const ExpenseInvoiceCreateForm = ({ className, firmId }: ExpenseInvoiceFo
                     {/* Final Financial Information */}
                     <ExpenseInvoiceFinancialInformation
                       subTotal={invoiceManager.subTotal}
-                      status={EXPENSE_INVOICE_STATUS.Nonexistent}
+                      status={EXPENSE_INVOICE_STATUS.Draft}
                       currency={invoiceManager.currency}
                       taxes={taxes.filter((tax) => !tax.isRate)}
                       taxWithholdings={taxWithholdings}
@@ -350,17 +350,17 @@ export const ExpenseInvoiceCreateForm = ({ className, firmId }: ExpenseInvoiceFo
             <Card className="border-0">
               <CardContent className="p-5">
                 {/* Control Section */}
-                <ExpenseInvoiceControlSection
-                  quotations={quotations}
-                  bankAccounts={bankAccounts}
-                  currencies={currencies}
-                  taxWithholdings={taxWithholdings}
-                  handleSubmitDraft={() => onSubmit(EXPENSE_INVOICE_STATUS.Draft)}
-                  reset={globalReset}
-                  hideValidateButton={true}
-                  loading={debounceLoading} handleSubmitValidated={function (): void {
-                    throw new Error('Function not implemented.');
-                  } }                />
+               <ExpenseInvoiceControlSection
+  quotations={quotations}
+  bankAccounts={bankAccounts}
+  currencies={currencies}
+  taxWithholdings={taxWithholdings}
+  handleSubmitDraft={() => onSubmit(EXPENSE_INVOICE_STATUS.Draft)}
+  reset={globalReset}
+  hideValidateButton={true}
+  loading={debounceLoading}
+  handleSubmitValidated={() => onSubmit(EXPENSE_INVOICE_STATUS.Validated)}
+/>
               </CardContent>
             </Card>
           </ScrollArea>

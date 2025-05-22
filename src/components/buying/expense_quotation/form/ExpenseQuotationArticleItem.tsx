@@ -18,6 +18,7 @@ import { UneditableInput } from '@/components/ui/uneditable/uneditable-input';
 import { api } from '@/api';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ExpenseInvoiceTaxEntries } from '../../expense_invoice/form/ExpenseInvoiceTaxEntries';
+import { QuotationTaxEntries } from './ExpenseQuotationTaxEntries';
 
 interface ExpenseQuotationArticleItemProps {
   className?: string;
@@ -198,56 +199,58 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
     });
 };
 
-  const handleSelectArticle = async (value: string) => {
-    const selectedArticle = articles.find((art) => art.id === parseInt(value));
-    if (selectedArticle) {
-      try {
-        // Vérifier si la référence existe déjà
-        const isReferenceDuplicate = existingEntries.some(entry => {
-          const entryReference = entry.article?.reference ?? (entry as any)?.reference;
-          return entryReference?.toLowerCase() === selectedArticle.reference?.toLowerCase();
-        });
-  
-        if (isReferenceDuplicate) {
-          toast.error(tInvoicing('quotation.errors.reference_exists'));
-          return;
-        }
-  
-        if (selectedArticle.quantityInStock <= 0) {
-          setQuantityError(tInvoicing('quotation.errors.quantity_unavailable'));
-          toast.error(tInvoicing('quotation.errors.quantity_unavailable'));
-          return;
-        }
-        
-        const unitPrice = Math.round(Number(selectedArticle.unitPrice)) || 0;
-        
-        onChange({
-          ...article,
-          article: {
-            ...selectedArticle,
-            title: selectedArticle.title || '',
-            description: selectedArticle.description || '',
-            reference: selectedArticle.reference || '',
-            quantityInStock: selectedArticle.quantityInStock,
-            status: selectedArticle.status || 'draft',
-            version: selectedArticle.version || 0,
-            unitPrice: unitPrice,
-          },
-          quantity: 1,
-          orderedQuantity: 1,
-          originalStock: selectedArticle.quantityInStock,
-          unit_price: unitPrice
-        });
-        
-        setIsExistingArticleSelected(true);
-        setQuantityError(null);
-      } catch (error) {
-        console.error('Error selecting article:', error);
-        toast.error(tInvoicing('quotation.errors.article_selection_failed'));
-      }
-    }
-  };
+ const handleSelectArticle = async (value: string) => {
+  const selectedArticle = articles.find((art) => art.id === parseInt(value));
+  if (selectedArticle) {
+    try {
+      // Vérifier si la référence existe déjà dans les entrées actuelles
+      const isReferenceDuplicate = existingEntries.some(entry => {
+        if (entry.id === article.id) return false; // Ignorer l'entrée actuelle
+        const entryReference = entry.article?.reference ?? (entry as any)?.reference;
+        return entryReference?.toLowerCase() === selectedArticle.reference?.toLowerCase();
+      });
 
+      if (isReferenceDuplicate) {
+        toast.error(tInvoicing('quotation.errors.reference_exists'));
+        return;
+      }
+
+      if (selectedArticle.quantityInStock <= 0) {
+        setQuantityError(tInvoicing('quotation.errors.quantity_unavailable'));
+        toast.error(tInvoicing('quotation.errors.quantity_unavailable'));
+        return;
+      }
+      
+      const unitPrice = Math.round(Number(selectedArticle.unitPrice)) || 0;
+      
+      onChange({
+        ...article,
+        articleId: selectedArticle.id, // Ajoutez ceci pour bien identifier l'article existant
+        article: {
+          ...selectedArticle,
+          title: selectedArticle.title || '',
+          description: selectedArticle.description || '',
+          reference: selectedArticle.reference || '',
+          quantityInStock: selectedArticle.quantityInStock,
+          status: selectedArticle.status || 'draft',
+          version: selectedArticle.version || 0,
+          unitPrice: unitPrice,
+        },
+        quantity: 1,
+        orderedQuantity: 1,
+        originalStock: selectedArticle.quantityInStock,
+        unit_price: unitPrice,
+        reference: selectedArticle.reference // Assurez-vous que la référence est bien transmise
+      });
+      
+      setIsExistingArticleSelected(true);
+      setQuantityError(null);
+    } catch (error) {
+      console.error('Error selecting article:', error);
+      toast.error(tInvoicing('quotation.errors.article_selection_failed'));
+    }
+  }
+};
   const handleUseExistingArticleChange = (checked: boolean) => {
     setUseExistingArticle(checked);
     if (!checked) {
@@ -629,7 +632,7 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
       <div className="w-3/12 flex flex-col h-full">
         <div className="my-auto">
           <Label className="block my-3">{tInvoicing('article.attributes.taxes')}</Label>
-          <ExpenseInvoiceTaxEntries
+          <QuotationTaxEntries
             article={article}
             taxes={taxes}
             selectedTaxIds={selectedTaxIds}

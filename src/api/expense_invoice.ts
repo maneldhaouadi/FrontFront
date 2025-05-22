@@ -165,7 +165,8 @@ const duplicate = async (duplicateInvoiceDto: ExpenseDuplicateInvoiceDto): Promi
       'public/expenseinvoice/duplicate',
       {
         ...duplicateInvoiceDto,
-        sequentialNumbr: null, // Définir sequentialNumbr à null
+        sequentialNumbr: null, // Force la génération d'un nouveau numéro
+        generateNewReferences: true // Nouveau paramètre pour forcer la génération de références
       },
       {
         headers: {
@@ -173,6 +174,14 @@ const duplicate = async (duplicateInvoiceDto: ExpenseDuplicateInvoiceDto): Promi
         },
       }
     );
+    
+    // Vérification des références dans la réponse
+    if (response.data?.articleExpenseEntries) {
+      response.data.articleExpenseEntries.forEach(entry => {
+        console.log('Nouvelle référence générée:', entry.reference);
+      });
+    }
+    
     return response.data;
   } catch (error) {
     console.error('Error duplicating invoice:', error);

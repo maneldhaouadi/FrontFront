@@ -488,6 +488,38 @@ const findOneByReference = async (reference: string): Promise<Article | null> =>
   }
 };
 
+const checkAvailability = async (
+  id: number,
+  quantity: number
+): Promise<{
+    available: boolean;
+    availableQuantity: number;
+    message?: string;
+  }> => {
+  try {
+    const response = await axios.get(`/public/article/${id}/check-availability?quantity=${quantity}`);
+    return response.data;
+  } catch (error) {
+    console.error("Erreur lors de la vérification de la disponibilité:", error);
+    throw new Error("Impossible de vérifier la disponibilité de l'article.");
+  }
+}
+
+const updateArticleStock = async (
+  id: number,
+  quantityChange: number
+): Promise<Article> => {
+  try {
+    const response = await axios.put<Article>(`/public/article/${id}/update-stock`, {
+      quantityChange
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Erreur lors de la mise à jour du stock:", error);
+    throw new Error("Impossible de mettre à jour le stock de l'article.");
+  }
+};
+
 
 // N'oubliez pas d'ajouter ces méthodes à l'objet exporté à la fin du fichier
 export const article = {
@@ -525,5 +557,7 @@ export const article = {
   getSuspiciousArticles,
   getPriceTrends,
   getStockHealth,
-  findOneByReference
+  findOneByReference,
+  checkAvailability,
+  updateArticleStock,
 };

@@ -168,42 +168,6 @@ export const ExpenseInvoiceFinancialInformation = ({
           </div>
         )}
         {/* tax stamp */}
-        {!controlManager.isTaxStampHidden && (
-          <div className="flex items-center my-2">
-            <Label className="w-1/3">{tInvoicing('invoice.attributes.tax_stamp')}</Label>
-            {edit ? (
-              <SelectShimmer isPending={loading || false} className="-mt-0.5 ">
-                <Select
-                  onValueChange={(value: string) => {
-                    invoiceManager.set('taxStampId', parseInt(value));
-                  }}
-                  defaultValue={invoiceManager.taxStampId?.toString()}>
-                  <SelectTrigger className="w-2/3">
-                    <SelectValue
-                      placeholder={`${'0.'.padEnd(digitAfterComma + 2, '0')} ${currencySymbol}`}
-                    />
-                  </SelectTrigger>
-                  <SelectContent align="start">
-                    {taxes.map((tax) => {
-                      return (
-                        <SelectItem key={tax.id} value={tax?.id?.toString() || ''}>
-                          {tax.label} ({tax.value?.toFixed(digitAfterComma) || 0} {currencySymbol})
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </SelectShimmer>
-            ) : (
-              <div className="flex flex-col w-full">
-                <Label className="ml-auto" isPending={loading || false}>
-                  {taxes.find((t) => (t.id = invoiceManager.taxStampId))?.value}{' '}
-                  <span>{currency?.symbol}</span>
-                </Label>
-              </div>
-            )}
-          </div>
-        )}
       </div>
       <div className="flex flex-col w-full mt-2">
         <div className="flex my-2">
