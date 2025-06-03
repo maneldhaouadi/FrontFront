@@ -10,7 +10,7 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { ArticleQuotationEntry, Currency, ExpenseArticleQuotationEntry, Tax } from '@/types';
+import {Currency, ExpenseArticleQuotationEntry, Tax } from '@/types';
 import { Plus, X } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';

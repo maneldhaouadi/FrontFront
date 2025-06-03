@@ -62,7 +62,8 @@ export interface CreateExpensArticleQuotationEntry extends Omit<
   | 'articleExpensQuotationEntryTaxes'
 > {
   taxes?: number[];
-  reference: string; // Ajout explicite car présent dans le DTO backend
+  reference: string;
+  article?: Article; // Changé pour correspondre au type Article au lieu de null
 }
 
 export interface ExpenseQuotationUpload extends DatabaseEntity {
@@ -127,7 +128,8 @@ export interface CreateExpensQuotationDto
   sequentialNumbr:string,
   sequential:string,
   pdfFileId?: number;
-  pdfFile?:File
+  pdfFile?:File;
+  
 }
 
 export interface UpdateExpensQuotationDto extends CreateExpensQuotationDto {

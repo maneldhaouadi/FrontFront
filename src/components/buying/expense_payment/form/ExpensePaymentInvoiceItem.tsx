@@ -29,6 +29,7 @@ export const ExpensePaymentInvoiceItem: React.FC<ExpensePaymentInvoiceItemProps>
 }) => {
   const router = useRouter();
   const { t: tInvoicing } = useTranslation('invoicing');
+  const [error, setError] = React.useState<string | null>(null);
 
   const invoiceCurrency = invoiceEntry.expenseInvoice?.currency;
   const digitAfterComma = invoiceCurrency?.digitAfterComma || 2;
@@ -67,8 +68,6 @@ export const ExpensePaymentInvoiceItem: React.FC<ExpensePaymentInvoiceItemProps>
   const maxAllowedAmount = React.useMemo(() => {
     if (isSameCurrency) return remainingAmount.toUnit();
     
-    // Conversion correcte: montant_restant_en_devise_facture × taux = montant_max_en_devise_paiement
-    // Exemple: 1000 EUR × 3.38 = 3380 TND
     return remainingAmount.multiply(effectiveExchangeRate).toUnit();
   }, [remainingAmount, isSameCurrency, effectiveExchangeRate]);
 
@@ -81,12 +80,19 @@ export const ExpensePaymentInvoiceItem: React.FC<ExpensePaymentInvoiceItemProps>
     if (isSameCurrency) {
       return remainingAmount.subtract(paymentAmount);
     } else {
-      // Conversion inverse: montant_paiement / taux = montant_en_devise_facture
-      // Exemple: 3380 TND / 3.38 = 1000 EUR
       const amountInInvoiceCurrency = paymentAmount.divide(effectiveExchangeRate);
       return remainingAmount.subtract(amountInInvoiceCurrency);
     }
   }, [remainingAmount, invoiceEntry, effectiveExchangeRate, isSameCurrency, digitAfterComma]);
+
+  const validateAmount = (amount: number): boolean => {
+    if (amount > maxAllowedAmount) {
+      setError(`Le montant payé (${amount.toFixed(digitAfterComma)} ${currency?.code || 'DEV'}) dépasse le montant restant à payer (${maxAllowedAmount.toFixed(digitAfterComma)} ${currency?.code || 'DEV'})`);
+      return false;
+    }
+    setError(null);
+    return true;
+  };
 
   const handleAmountPaidChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const rawValue = e.target.value;
@@ -96,6 +102,7 @@ export const ExpensePaymentInvoiceItem: React.FC<ExpensePaymentInvoiceItemProps>
         amount: undefined, 
         originalAmount: undefined 
       });
+      setError(null);
       return;
     }
 
@@ -103,13 +110,18 @@ export const ExpensePaymentInvoiceItem: React.FC<ExpensePaymentInvoiceItemProps>
     if (isNaN(numberValue)) return;
 
     const roundedValue = parseFloat(numberValue.toFixed(digitAfterComma));
+    
+    // Validation du montant
+    if (!validateAmount(roundedValue)) {
+      return;
+    }
+
     const newEntry = { ...invoiceEntry, amount: roundedValue };
 
     if (isSameCurrency) {
       newEntry.originalAmount = roundedValue;
       newEntry.exchangeRate = 1;
     } else {
-      // Calcul correct du montant original: montant_paiement / taux
       newEntry.originalAmount = parseFloat((roundedValue / effectiveExchangeRate).toFixed(digitAfterComma));
       newEntry.exchangeRate = effectiveExchangeRate;
     }
@@ -129,10 +141,15 @@ export const ExpensePaymentInvoiceItem: React.FC<ExpensePaymentInvoiceItemProps>
     if (isNaN(rate) || rate <= 0) return;
     
     const newRate = parseFloat(rate.toFixed(6));
+    
+    // Revalider le montant si le taux change
+    if (invoiceEntry.amount && !validateAmount(invoiceEntry.amount)) {
+      return;
+    }
+    
     onChange({ 
       ...invoiceEntry, 
       exchangeRate: newRate,
-      // Recalcul du montant original avec le nouveau taux: montant_paiement / nouveau_taux
       originalAmount: invoiceEntry.amount ? parseFloat((invoiceEntry.amount / newRate).toFixed(digitAfterComma)) : undefined
     });
   };
@@ -175,8 +192,8 @@ export const ExpensePaymentInvoiceItem: React.FC<ExpensePaymentInvoiceItemProps>
           type="number" 
           step="0.0001"
           min="0.0001"
-value={typeof exchangeRateValue === 'number' ? exchangeRateValue.toFixed(4) : ''}
-         onChange={handleExchangeRateChange}
+          value={typeof exchangeRateValue === 'number' ? exchangeRateValue.toFixed(4) : ''}
+          onChange={handleExchangeRateChange}
           disabled={isSameCurrency || disabled}
           className="h-8 text-sm"
         />
@@ -200,11 +217,18 @@ value={typeof exchangeRateValue === 'number' ? exchangeRateValue.toFixed(4) : ''
           min="0"
           max={maxAllowedAmount.toFixed(digitAfterComma)}
           disabled={disabled}
-          className="h-8 text-sm"
+          className={cn("h-8 text-sm", {
+            "border-red-500": error
+          })}
         />
         <Label className="text-xs text-muted-foreground">
           Max: {maxAllowedAmount.toFixed(digitAfterComma)} {currency?.code || 'DEV'}
         </Label>
+        {error && (
+          <Label className="text-xs text-red-500">
+            {error}
+          </Label>
+        )}
       </div>
 
       {/* Remaining Amount */}

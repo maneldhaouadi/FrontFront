@@ -10,9 +10,10 @@ import DialogflowTable from './DialogflowTable'
 export const FloatingChatbot = () => {
   const [isOpen, setIsOpen] = useState(false)
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false)
-  const [showFullscreenHistory, setShowFullscreenHistory] = useState(false)
-  const [expandedHistory, setExpandedHistory] = useState(false) // Ajoutez cet état
-  const pathname = usePathname()// Fermer le chatbot quand la route change
+  const [fullscreenMode, setFullscreenMode] = useState(false)
+  const pathname = usePathname()
+
+  // Fermer le chatbot quand la route change
   useEffect(() => {
     setIsOpen(false)
   }, [pathname])
@@ -34,54 +35,54 @@ export const FloatingChatbot = () => {
     }
   }
 
+  const handleShowFullHistory = () => {
+    setFullscreenMode(true)
+  }
+
+  const handleCloseFullscreen = () => {
+    setFullscreenMode(false)
+  }
+
   return (
     <div className={cn(
       "fixed bottom-6 right-6 z-50",
       "transition-all duration-300 ease-in-out"
     )}>
       {/* Chatbot normal */}
-      <div className={cn(
-        "absolute bottom-full right-0 mb-4",
-        expandedHistory ? "w-[600px] h-[800px]" : "w-[400px] h-[600px]", // Modifiez cette ligne
-        "shadow-xl rounded-lg overflow-hidden border",
-        "transform origin-bottom-right",
-        "transition-all duration-300 ease-in-out",
-        isOpen && !showFullscreenHistory
-          ? "scale-100 opacity-100 pointer-events-auto" 
-          : "scale-95 opacity-0 pointer-events-none"
-      )}>
-        <DialogflowTable 
-          onNewMessage={handleNewMessage} 
-          onShowFullHistory={() => {
-            setExpandedHistory(true) // Activez l'état étendu
-            // setShowFullscreenHistory(true) // Commentez ou supprimez cette ligne
-          }}
-          expandedHistory={expandedHistory} // Passez la prop
-        />
-      </div>
-
-      {/* Historique en plein écran */}
-      {showFullscreenHistory && (
-        <div className="fixed inset-0 z-50 bg-background flex flex-col">
-          <div className="flex-1 overflow-hidden flex flex-col">
-            <DialogflowTable 
-              fullscreenMode 
-              onCloseFullscreen={() => setShowFullscreenHistory(false)}
-            />
-          </div>
+      {!fullscreenMode && isOpen && (
+        <div className={cn(
+          "absolute bottom-full right-0 mb-4",
+          "w-[400px] h-[600px]",
+          "shadow-xl rounded-lg overflow-hidden border",
+          "transform origin-bottom-right",
+          "transition-all duration-300 ease-in-out",
+          isOpen
+            ? "scale-100 opacity-100 pointer-events-auto" 
+            : "scale-95 opacity-0 pointer-events-none"
+        )}>
+          <DialogflowTable 
+            onNewMessage={handleNewMessage}
+            onShowFullHistory={handleShowFullHistory}
+          />
         </div>
       )}
 
-<Tooltip>
+      {/* Historique en plein écran */}
+      {fullscreenMode && (
+        <div className="fixed inset-0 z-50 bg-background flex flex-col">
+          <DialogflowTable 
+            fullscreenMode 
+            onCloseFullscreen={handleCloseFullscreen}
+          />
+        </div>
+      )}
+
+      <Tooltip>
         <TooltipTrigger asChild>
           <Button
             onClick={() => {
-              if (expandedHistory) {
-                setExpandedHistory(false)
-              } else {
-                setIsOpen(!isOpen)
-                setHasUnreadMessages(false)
-              }
+              setIsOpen(!isOpen)
+              setHasUnreadMessages(false)
             }}
             className={cn(
               "rounded-full w-14 h-14 p-0",
@@ -160,7 +161,7 @@ export const FloatingChatbot = () => {
           </Button>
         </TooltipTrigger>
         <TooltipContent side="left">
-          {expandedHistory ? 'Réduire le chat' : isOpen ? 'Fermer le chat' : 'Ouvrir le chat'}
+          {isOpen ? 'Fermer le chat' : 'Ouvrir le chat'}
         </TooltipContent>
       </Tooltip>
     </div>

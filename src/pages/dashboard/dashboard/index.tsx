@@ -1,4 +1,4 @@
-import { InvoiceDashboard } from "@/components/dashboard/InvoiceDashboard";
+import { InvoiceDashboard } from "@/dashboard/InvoiceDashboard";
 
 export default function DashboardPage() {
   // Vous pourriez récupérer l'ID de la firme depuis les props ou le contexte

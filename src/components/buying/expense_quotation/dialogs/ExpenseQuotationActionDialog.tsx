@@ -48,8 +48,14 @@ export const ExpenseQuotationActionDialog: React.FC<ExpenseQuotationActionDialog
 
   const header = (
     <Label className="leading-5">
-      Voulez-vous vraiment {action?.toLowerCase()} le Devis N°{' '}
-      <span className="font-semibold">{sequential}</span> ?
+      {action === "Initialiser" 
+        ? "Voulez-vous vraiment réinitialiser tous les champs du devis ?" 
+        : `Voulez-vous vraiment ${action?.toLowerCase()} le Devis N° `
+      }
+      {action !== "Initialiser" && (
+        <span className="font-semibold">{sequential}</span>
+      )}
+      {action !== "Initialiser" && " ?"}
     </Label>
   );
 
@@ -58,21 +64,22 @@ export const ExpenseQuotationActionDialog: React.FC<ExpenseQuotationActionDialog
       <Button
         className="w-1/2 flex gap-2"
         onClick={() => {
-          id && callback();
+          callback();
           onClose();
-        }}>
+        }}
+        variant="default"
+      >
         <Check />
-        {action}
+        Confirmer
         <Spinner className="ml-2" size={'small'} show={isCallbackPending} />
       </Button>
       <Button
         className="w-1/2 flex gap-2"
-        variant={'secondary'}
-        onClick={() => {
-          onClose();
-        }}>
+        variant="secondary"
+        onClick={onClose}
+      >
         <X />
-        {tCommon('answer.no')}
+        Annuler
       </Button>
     </div>
   );

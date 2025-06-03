@@ -114,7 +114,7 @@ export const getQuotationColumns = (
       enableSorting: true,
       enableHiding: true
     },
-  {
+ {
   accessorKey: 'status',
   header: ({ column }) => (
     <DataTableColumnHeader
@@ -131,12 +131,12 @@ export const getQuotationColumns = (
     };
 
     return (
-      <div className=" justify-center">
+      <div className="justify-center">
         <Badge 
           className={` 
             flex items-center justify-center 
-            min-w-[60px] max-w-[700px]  // Largeur légèrement augmentée
-            h-8  // Hauteur conservée
+            min-w-[60px] max-w-[700px]
+            h-8
             rounded-full 
             text-sm font-medium 
             border
@@ -144,7 +144,7 @@ export const getQuotationColumns = (
             mx-auto
           `}
         >
-          <span className="truncate">{t(status)}</span>
+          <span className="truncate font-bold">{t(status)}</span> {/* Ajout de font-bold ici */}
         </Badge>
       </div>
     );

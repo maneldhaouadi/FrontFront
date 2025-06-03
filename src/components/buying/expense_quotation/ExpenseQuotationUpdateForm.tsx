@@ -2,6 +2,7 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 import { api } from '@/api';
 import {
+  CreateExpensArticleQuotationEntry,
   ExpenseArticleQuotationEntry,
   ExpenseQuotation,
   EXPENSQUOTATION_STATUS,
@@ -210,106 +211,117 @@ export const ExpenseQuotationUpdateForm = ({ className, expensequotationId }: Ex
 
   // Update handler
   const onSubmit = async (status: EXPENSQUOTATION_STATUS) => {
-    try {
-      const articlesDto = articleManager.getArticles()?.map((article) => {
-        // Garantir que l'ID est toujours défini (0 si nouvel article)
-        const articleId = article?.article?.id ?? 0;
-        
-        const articleUpdateData = {
-            id: articleId, // <-- Maintenant toujours un nombre
-            title: article?.article?.title || '',
-            description: article?.article?.description || '',
-            reference: article?.article?.reference || article?.reference || '',
-            unitPrice: article?.unit_price || article?.article?.unitPrice || 0,
-            quantityInStock: article?.quantity || article?.article?.quantityInStock || 0,
-            status: article?.article?.status || 'draft',
-            version: article?.article?.version || 0
-        };
-    
-        return {
-            ...article,
-            article: articleUpdateData,
-            taxes: article?.articleExpensQuotationEntryTaxes?.map(t => t.tax?.id).filter(Boolean) as number[]
-        };
-    }) || [];
-  
-      // 2. Gestion du fichier PDF
-      let pdfFileId = quotationManager.pdfFileId;
-      if (quotationManager.pdfFile) {
-        const [uploadedPdfFileId] = await api.upload.uploadFiles([quotationManager.pdfFile]);
-        pdfFileId = uploadedPdfFileId;
-        
-        if (quotationManager.pdfFileId && quotationManager.pdfFileId !== pdfFileId) {
-          await api.upload.delete(quotationManager.pdfFileId);
-        }
-      }
-  
-      // 3. Gestion des fichiers supplémentaires
-      const additionalFiles = quotationManager.uploadedFiles
-        .filter((u) => !u.upload)
-        .map((u) => u.file);
-  
-      let uploadIds: number[] = [];
-      if (additionalFiles.length > 0) {
-        uploadIds = await api.upload.uploadFiles(additionalFiles);
-      }
-  
-      // 4. Construction de l'objet quotation
-      const quotation: UpdateExpensQuotationDto = {
-        id: quotationManager.id,
-        date: quotationManager.date?.toISOString().split('T')[0],
-        dueDate: quotationManager.dueDate?.toISOString().split('T')[0],
-        sequentialNumbr: quotationManager.sequentialNumbr,
-        sequential: quotationManager.sequentialNumbr,
-        object: quotationManager.object,
-        cabinetId: quotationManager.firm?.cabinetId,
-        firmId: quotationManager.firm?.id,
-        interlocutorId: quotationManager.interlocutor?.id,
-        currencyId: quotationManager.currency?.id,
-        bankAccountId: !controlManager.isBankAccountDetailsHidden ? quotationManager.bankAccount?.id : null,
-        status,
-        generalConditions: !controlManager.isGeneralConditionsHidden ? quotationManager.generalConditions : '',
-        notes: quotationManager.notes,
-        articleQuotationEntries: articlesDto,
-        discount: quotationManager.discount,
-        discount_type: quotationManager.discount_type === 'PERCENTAGE' 
-          ? DISCOUNT_TYPE.PERCENTAGE 
-          : DISCOUNT_TYPE.AMOUNT,
-        pdfFileId,
-        uploads: [
-          ...(quotationManager.uploadedFiles
-            .filter((u) => u.upload?.id)
-            .map((u) => ({
-              id: u.upload.id,
-              uploadId: u.upload.id
-            })) || []),
-          ...uploadIds.map((uploadId) => ({ uploadId }))
-        ],
-        expensequotationMetaData: {
-          showArticleDescription: !controlManager.isArticleDescriptionHidden,
-          hasBankingDetails: !controlManager.isBankAccountDetailsHidden,
-          hasGeneralConditions: !controlManager.isGeneralConditionsHidden,
-        },
-      };
-  
-      // 5. Validation avant envoi
-      const validation = api.expense_quotation.validate(quotation);
-      if (validation.message) {
-        toast.error(validation.message);
-        return;
-      }
-  
-      // 6. Envoi au backend
-      await updateQuotation({ 
-        quotation, 
-        files: additionalFiles 
-      });
-  
-      toast.success('Devis mis à jour avec succès');
-    } catch (error) {
-      console.error("Erreur lors de la mise à jour:", error);
-    }
+  try {
+    // 1. Préparation des articles avec leurs taxes
+    const articlesDto: CreateExpensArticleQuotationEntry[] = articleManager.getArticles()?.map((article) => {
+  // Créez un objet Article conforme à l'interface si article.article existe
+  const mappedArticle = article.article ? {
+    id: article.article.id,
+    title: article.article.title || '',
+    description: article.article.description || '',
+    reference: article.article.reference || '',
+    unitPrice: article.unit_price || article.article.unitPrice || 0,
+    quantityInStock: article.quantity || article.article.quantityInStock || 0,
+    status: article.article.status || 'draft',
+    version: article.article.version || 0,
+    // Ajoutez ici toutes les autres propriétés requises par l'interface Article
+  } : undefined; // Utilisez undefined au lieu de null
+
+  return {
+    id: article.id,
+    reference: article.reference || '',
+    description: article.article?.description || article.article?.description || '',
+    quantity: article.quantity || 0,
+    unit_price: article.unit_price || 0,
+    discount: article.discount || 0,
+    discount_type: article.discount_type || DISCOUNT_TYPE.AMOUNT,
+    subTotal: article.subTotal || 0,
+    total: article.total || 0,
+    article: mappedArticle, // Maintenant de type Article | undefined
+    taxes: (article.articleExpensQuotationEntryTaxes || [])
+      .map(taxEntry => taxEntry.tax?.id)
+      .filter((id): id is number => id !== undefined)
   };
+}) || [];
+
+    // 2. Gestion du fichier PDF
+    let pdfFileId = quotationManager.pdfFileId;
+    if (quotationManager.pdfFile) {
+      const [uploadedPdfFileId] = await api.upload.uploadFiles([quotationManager.pdfFile]);
+      pdfFileId = uploadedPdfFileId;
+      
+      if (quotationManager.pdfFileId && quotationManager.pdfFileId !== pdfFileId) {
+        await api.upload.delete(quotationManager.pdfFileId);
+      }
+    }
+
+    // 3. Gestion des fichiers supplémentaires
+    const additionalFiles = quotationManager.uploadedFiles
+      .filter((u) => !u.upload)
+      .map((u) => u.file);
+
+    let uploadIds: number[] = [];
+    if (additionalFiles.length > 0) {
+      uploadIds = await api.upload.uploadFiles(additionalFiles);
+    }
+
+    // 4. Construction de l'objet quotation pour le backend
+    const quotationDto: UpdateExpensQuotationDto = {
+      id: quotationManager.id,
+      date: quotationManager.date?.toISOString().split('T')[0],
+      dueDate: quotationManager.dueDate?.toISOString().split('T')[0],
+      sequentialNumbr: quotationManager.sequentialNumbr,
+      sequential: quotationManager.sequentialNumbr,
+      object: quotationManager.object,
+      cabinetId: quotationManager.firm?.cabinetId,
+      firmId: quotationManager.firm?.id,
+      interlocutorId: quotationManager.interlocutor?.id,
+      currencyId: quotationManager.currency?.id,
+      bankAccountId: !controlManager.isBankAccountDetailsHidden ? quotationManager.bankAccount?.id : null,
+      status,
+      generalConditions: !controlManager.isGeneralConditionsHidden ? quotationManager.generalConditions : '',
+      notes: quotationManager.notes,
+      articleQuotationEntries: articlesDto,
+      discount: quotationManager.discount,
+      discount_type: quotationManager.discount_type === 'PERCENTAGE' 
+        ? DISCOUNT_TYPE.PERCENTAGE 
+        : DISCOUNT_TYPE.AMOUNT,
+      pdfFileId,
+      uploads: [
+        ...(quotationManager.uploadedFiles
+          .filter((u) => u.upload?.id)
+          .map((u) => ({
+            id: u.upload.id,
+            uploadId: u.upload.id
+          })) || []),
+        ...uploadIds.map((uploadId) => ({ uploadId }))
+      ],
+      expensequotationMetaData: {
+        showArticleDescription: !controlManager.isArticleDescriptionHidden,
+        hasBankingDetails: !controlManager.isBankAccountDetailsHidden,
+        hasGeneralConditions: !controlManager.isGeneralConditionsHidden,
+      },
+    };
+
+    // 5. Validation avant envoi
+    const validation = api.expense_quotation.validate(quotationDto);
+    if (validation.message) {
+      toast.error(validation.message);
+      return;
+    }
+
+    // 6. Envoi au backend
+    await updateQuotation({ 
+      quotation: quotationDto, 
+      files: additionalFiles 
+    });
+
+    toast.success('Devis mis à jour avec succès');
+  } catch (error) {
+    console.error("Erreur lors de la mise à jour:", error);
+    toast.error("Une erreur est survenue lors de la mise à jour du devis");
+  }
+};
   // Component representation
   if (debounceFetching) return <Spinner className="h-screen" />;
   return (

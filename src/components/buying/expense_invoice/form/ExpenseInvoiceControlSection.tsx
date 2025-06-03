@@ -28,7 +28,7 @@ import {
   TaxWithholding
 } from '@/types';
 import { UneditableInput } from '@/components/ui/uneditable/uneditable-input';
-import { EXPENSE_INVOICE_STATUS} from '@/types/expense_invoices';
+import { EXPENSE_INVOICE_STATUS, ExpenseArticleInvoiceEntry} from '@/types/expense_invoices';
 import { EXPENSE_INVOICE_LIFECYCLE_ACTIONS } from '@/constants/expense_invoice.lifecycle';
 import { useExpenseInvoiceManager } from '../hooks/useExpenseInvoiceManager';
 import { useExpenseInvoiceControlManager } from '../hooks/useExpenseInvoiceControlManager';
@@ -159,6 +159,32 @@ export const ExpenseInvoiceControlSection = ({
 ].filter(Boolean) as ExpenseInvoiceLifecycle[];
   const sequential = invoiceManager.sequentialNumbr;
 
+  function convertQuotationEntryToInvoiceEntry(
+  quotationEntry: ExpenseArticleQuotationEntry
+): ExpenseArticleInvoiceEntry | null {  // Retourne null si la quantité est invalide
+  // Vérifier que la quantité est définie et supérieure à 0
+  if (!quotationEntry.quantity || quotationEntry.quantity <= 0) {
+    toast.error(`La quantité pour l'article ${quotationEntry.article?.title || ''} est invalide`);
+    return null;
+  }
+
+  return {
+    id: 0, // Nouvel ID sera généré
+    article: quotationEntry.article,
+    quantity: quotationEntry.quantity,
+    unit_price: quotationEntry.unit_price,
+    discount: quotationEntry.discount,
+    discount_type: quotationEntry.discount_type,
+    reference: quotationEntry.article?.reference,
+    expenseArticleInvoiceEntryTaxes: quotationEntry.articleExpensQuotationEntryTaxes?.map(taxEntry => ({
+      tax: taxEntry.tax
+    })) || [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    isFromQuotation: true,
+    originalQuotationEntryId: quotationEntry.id
+  };
+}
   return (
     <>
       <ExpenseInvoiceActionDialog
@@ -210,27 +236,48 @@ export const ExpenseInvoiceControlSection = ({
             {edit ? (
               <SelectShimmer isPending={loading}>
                 <Select
-                  key={invoiceManager?.quotationId || 'quotationId'}
-                  onValueChange={async (e) => {
-                    const quotationId = parseInt(e);
-                    const selectedQuotation = quotations?.find((q) => q.id === quotationId);
-                    
-                    if (selectedQuotation) {
-                      // Chargez les détails complets du devis
-                      const fullQuotation = await api.expense_quotation.findOne(quotationId, [
-                        'expensearticleQuotationEntries',
-                        'expensearticleQuotationEntries.article'
-                      ]);
-                      
-                      // Mettez à jour le manager avec toutes les données
-                      invoiceManager.set('quotationId', quotationId);
-                      invoiceManager.set('quotation', fullQuotation);
-                      
-                      console.log('Quotation mise à jour:', fullQuotation); // Pour le débogage
-                    }
-                  }}
-                  value={invoiceManager?.quotationId?.toString() || ''}
-                >
+  key={invoiceManager?.quotationId || 'quotationId'}
+  onValueChange={async (e) => {
+    const quotationId = parseInt(e);
+    const selectedQuotation = quotations?.find((q) => q.id === quotationId);
+    
+    if (selectedQuotation) {
+      try {
+        // Chargez les détails complets du devis
+        const fullQuotation = await api.expense_quotation.findOne(quotationId, [
+          'expensearticleQuotationEntries',
+          'expensearticleQuotationEntries.article',
+          'expensearticleQuotationEntries.articleExpensQuotationEntryTaxes',
+          'expensearticleQuotationEntries.articleExpensQuotationEntryTaxes.tax'
+        ]);
+        
+        // Mettez à jour le manager avec toutes les données
+        invoiceManager.set('quotationId', quotationId);
+        invoiceManager.set('quotation', fullQuotation);
+        
+        // Convertir les articles du devis en articles de facture
+        const quotationEntries = fullQuotation.expensearticleQuotationEntries || [];
+        const invoiceArticles = quotationEntries
+          .map(convertQuotationEntryToInvoiceEntry)
+          .filter(article => article !== null) as ExpenseArticleInvoiceEntry[];
+        
+        if (invoiceArticles.length === 0) {
+          toast.error("Aucun article valide avec quantité > 0 dans ce devis");
+          return;
+        }
+        
+        // Mettre à jour les articles de la facture
+        articleManager.setArticles(invoiceArticles);
+        
+        toast.success(`${invoiceArticles.length} articles ajoutés depuis le devis`);
+      } catch (error) {
+        console.error('Erreur lors du chargement du devis:', error);
+        toast.error('Impossible de charger les articles du devis');
+      }
+    }
+  }}
+  value={invoiceManager?.quotationId?.toString() || ''}
+>
                   <SelectTrigger className="my-1 w-full">
                     <SelectValue placeholder={tInvoicing('controls.quotation_select_placeholder')} />
                   </SelectTrigger>

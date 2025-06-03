@@ -38,7 +38,7 @@ export const ExpenseInvoiceGeneralInformation = ({
   edit = true,
   loading,
   isInspectMode = false,
-  includeFiles = true, // Par défaut à true pour la rétro-compatibilité
+  includeFiles = true,
 }: ExpenseInvoiceGeneralInformationProps) => {
   const { t: tCommon } = useTranslation('common');
   const { t: tInvoicing } = useTranslation('invoicing');
@@ -46,9 +46,49 @@ export const ExpenseInvoiceGeneralInformation = ({
   const invoiceManager = useExpenseInvoiceManager();
   const mainInterlocutor = invoiceManager.firm?.interlocutorsToFirm?.find((entry) => entry?.isMain);
 
+  const [sequentialNumberError, setSequentialNumberError] = React.useState<string | null>(null);
+
   const validateSequentialNumber = (value: string) => {
-    const sequentialNumberRegex = /^INV-\d{4,5}$/;
-    return sequentialNumberRegex.test(value);
+    if (!value) {
+      setSequentialNumberError(tInvoicing('Le numéro séquentiel est requis'));
+      return false;
+    }
+    
+    const sequentialNumberRegex = /^INV-\d{1,6}$/;
+    if (!sequentialNumberRegex.test(value)) {
+      setSequentialNumberError(tInvoicing('Le format doit être INV- suivi de 1 à 6 chiffres'));
+      return false;
+    }
+    
+    setSequentialNumberError(null);
+    return true;
+  };
+
+  const handleSequentialNumberChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // N'autoriser que les chiffres et limiter à 6
+    const numericValue = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
+    
+    if (numericValue.length > 6) {
+      toast.error(tInvoicing('invoice.max_6_digits_allowed'));
+      return;
+    }
+    
+    const fullNumber = `INV-${numericValue}`;
+    invoiceManager.set('sequentialNumbr', fullNumber);
+    
+    // Valider le numéro séquentiel
+    validateSequentialNumber(fullNumber);
+    
+    if (numericValue) {
+      try {
+        const response = await api.expense_invoice.checkSequentialNumber(fullNumber);
+        if (response.exists) {
+          toast.error(tInvoicing('invoice.sequential_number_exists'));
+        }
+      } catch (error) {
+        console.error("Error checking sequential number:", error);
+      }
+    }
   };
 
   const handlePdfFileChange = (files: File[]) => {
@@ -120,7 +160,6 @@ export const ExpenseInvoiceGeneralInformation = ({
   return (
     <div className={cn(className, 'space-y-2')}>
       <div className="flex gap-4">
-        {/* Section Pièces jointes - Conditionnée par includeFiles */}
         {includeFiles && (
           <div className="w-1/2">
             <div className="grid w-full max-w-sm items-center gap-1.5">
@@ -141,7 +180,6 @@ export const ExpenseInvoiceGeneralInformation = ({
               />
             </div>
 
-            {/* Affichage conditionnel du fichier PDF */}
             {includeFiles && invoiceManager.uploadPdfField && (
               <div className="mt-2 grid grid-cols-1 gap-1">
                 <div className="flex flex-col items-center p-2 border rounded-md bg-white max-w-[200px]">
@@ -177,7 +215,6 @@ export const ExpenseInvoiceGeneralInformation = ({
           </div>
         )}
 
-        {/* Section Date et Échéance */}
         <div className="w-1/2 flex flex-col gap-2">
           <div>
             <Label className="text-xs font-semibold mb-1">{tInvoicing('invoice.attributes.date')} (*)</Label>
@@ -208,7 +245,6 @@ export const ExpenseInvoiceGeneralInformation = ({
         </div>
       </div>
 
-      {/* Section Object et Numéro de Facture */}
       <div className="flex gap-1">
         <div className="w-2/3">
           <Label className="text-xs font-semibold mb-1">{tInvoicing('invoice.attributes.object')} (*)</Label>
@@ -225,51 +261,38 @@ export const ExpenseInvoiceGeneralInformation = ({
           )}
         </div>
         <div className="w-1/3">
-  <Label className="text-xs font-semibold mb-1">
-    {tInvoicing('invoice.singular')} N° *
-  </Label>
-  {edit && !isInspectMode ? (
-    <div className="relative">
-      <div className="flex items-center">
-        <span className="inline-flex items-center h-8 px-3 text-sm border border-r-0 rounded-l-md bg-gray-50 text-gray-500 border-gray-300">
-          INV-
-        </span>
-        <Input
-          className={cn(
-            "w-full h-8 rounded-l-none",
-            "border-red-500 focus-visible:ring-red-500"
+          <Label className="text-xs font-semibold mb-1">
+            {tInvoicing('invoice.singular')} N° *
+          </Label>
+          {edit && !isInspectMode ? (
+            <div className="relative">
+              <div className="flex items-center">
+                <span className="inline-flex items-center h-8 px-3 text-sm border border-r-0 rounded-l-md bg-gray-50 text-gray-500 border-gray-300">
+                  INV-
+                </span>
+                <Input
+                  className={cn(
+                    "w-full h-8 rounded-l-none",
+                    sequentialNumberError && "border-red-500 focus-visible:ring-red-500"
+                  )}
+                  placeholder="123456"
+                  value={invoiceManager.sequentialNumbr?.replace('INV-', '') || ''}
+                  onChange={handleSequentialNumberChange}
+                  onBlur={() => validateSequentialNumber(invoiceManager.sequentialNumbr || '')}
+                  isPending={loading}
+                  maxLength={6}
+                />
+              </div>
+              {sequentialNumberError && (
+                <p className="mt-1 text-xs text-red-500">{sequentialNumberError}</p>
+              )}
+            </div>
+          ) : (
+            <UneditableInput value={invoiceManager.sequentialNumbr || ''} />
           )}
-          placeholder="12345"
-          value={invoiceManager.sequentialNumbr?.replace('INV-', '') || ''}
-          onChange={async (e) => {  // Mark the callback as async
-            // N'autoriser que les chiffres
-            const numericValue = e.target.value.replace(/[^0-9]/g, '');
-            const fullNumber = `INV-${numericValue}`;
-            invoiceManager.set('sequentialNumbr', fullNumber);
-            
-            // Vérifier si le numéro existe seulement quand le format est valide
-            if (numericValue) {
-              try {
-                const response = await api.expense_invoice.checkSequentialNumber(fullNumber);
-                if (response.exists) {
-                  toast.error(tInvoicing('invoice.sequential_number_exists'));
-                }
-              } catch (error) {
-                console.error("Error checking sequential number:", error);
-              }
-            }
-          }}
-          isPending={loading}
-        />
+        </div>
       </div>
-    </div>
-  ) : (
-    <UneditableInput value={invoiceManager.sequentialNumbr || ''} />
-  )}
-</div>
-</div>
 
-      {/* Section Firm et Interlocutor */}
       <div className="flex gap-1">
         <div className="w-1/2">
           <Label className="text-xs font-semibold mb-1">{tInvoicing('invoice.attributes.firm')} (*)</Label>

@@ -98,12 +98,6 @@ const baseMenuItems = [
         href: '/buying/expense_payments',
         icon: <Wallet className="h-5 w-5" />
       },
-      {
-        code: 'articles',
-        title: 'Articles',
-        href: '/article/article-Lists',
-        icon: <Wallet className="h-5 w-5" />
-      },
     ]
   },
   {

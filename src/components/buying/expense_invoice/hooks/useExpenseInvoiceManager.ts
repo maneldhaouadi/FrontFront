@@ -13,6 +13,7 @@ import { DISCOUNT_TYPE } from '@/types/enums/discount-types';
 import { ExpensePaymentCondition } from '@/types/expense-payment-condition';
 import {
   EXPENSE_INVOICE_STATUS,
+  ExpenseArticleInvoiceEntry,
   ExpenseInvoice,
   ExpenseInvoiceUploadedFile,
 } from '@/types/expense_invoices';
@@ -47,6 +48,7 @@ type ExpenseInvoiceManager = {
   taxWithholdingId?: number;
   // utility data
   isInterlocutorInFirm: boolean;
+    articles: ExpenseArticleInvoiceEntry[];
   // methods
   setFirm: (firm?: Firm) => void;
   setInterlocutor: (interlocutor?: Interlocutor) => void;

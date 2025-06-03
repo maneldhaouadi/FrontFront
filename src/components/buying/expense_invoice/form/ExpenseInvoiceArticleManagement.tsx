@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   useSensors,
@@ -32,6 +32,7 @@ import { useTranslation } from 'react-i18next';
 import { ExpenseInvoiceArticleItem } from './ExpenseInvoiceArticleItem';
 import { useExpenseInvoiceManager } from '../hooks/useExpenseInvoiceManager';
 import { useExpenseInvoiceArticleManager } from '../hooks/useExpenseInvoiceArticleManager';
+import { ExpenseArticleInvoiceEntry } from '@/types/expense_invoices';
 
 interface ExpenseInvoiceArticleManagementProps {
   className?: string;
@@ -52,6 +53,7 @@ export const ExpenseInvoiceArticleManagement: React.FC<ExpenseInvoiceArticleMana
   const { t: tInvoicing } = useTranslation('invoicing');
   const invoiceManager = useExpenseInvoiceManager();
   const articleManager = useExpenseInvoiceArticleManager();
+  const [articles, setArticles] = useState<ExpenseArticleInvoiceEntry[]>([]);
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {

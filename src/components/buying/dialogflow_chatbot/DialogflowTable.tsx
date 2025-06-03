@@ -33,6 +33,9 @@ type DocumentDetails = {
   dueDate?: string;
   status?: string;
   articleCount?: number;
+  currency?: string; // Ajouté
+  paidAmount?: number; // Ajouté pour les factures
+  remainingAmount?: number; // Ajouté pour les factures
 };
 
 type SessionData = {
@@ -166,36 +169,73 @@ const DialogflowTable = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [quotationDate, setQuotationDate] = useState<string>('');
   const [selectedCurrency, setSelectedCurrency] = useState<string>('EUR');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlSessionId = urlParams.get('sessionId');
-    const newSessionId = urlSessionId || `session-${Date.now()}`;
-  
-    if (!urlSessionId) {
-      window.history.replaceState({}, '', `?sessionId=${newSessionId}`);
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlSessionId = urlParams.get('sessionId');
+  const newSessionId = urlSessionId || `session-${Date.now()}`;
+
+  if (!urlSessionId) {
+    window.history.replaceState({}, '', `?sessionId=${newSessionId}`);
+  }
+
+  setSessionId(newSessionId);
+  const storedMessages = getSessionMessages(newSessionId);
+
+  if (storedMessages.length > 0) {
+    // Retraduire tous les messages du bot
+    const translatedMessages = storedMessages.map(msg => {
+      if (msg.sender === 'bot') {
+        return {
+          ...msg,
+          text: translateMessage(msg.text, languageCode)
+        };
+      }
+      return msg;
+    });
+    setMessages(translatedMessages);
+  } else {
+    const welcomeMessage: HistoryEntry = {
+      sender: 'bot',
+      text: getWelcomeMessage(languageCode),
+      timestamp: new Date()
+    };
+    setMessages([welcomeMessage]);
+    storeSession(newSessionId, [welcomeMessage]);
+  }
+}, [languageCode]);
+
+// Fonctions d'aide
+const getWelcomeMessage = (lang: string) => {
+  return lang === 'fr' 
+    ? 'Bonjour ! Comment puis-je vous aider ?' 
+    : lang === 'en' 
+    ? 'Hello! How can I help you?'
+    : '¡Hola! ¿Cómo puedo ayudarte?';
+};
+
+const translateMessage = (text: string, lang: string) => {
+  // Implémentez votre logique de traduction ici
+  // Par exemple, un simple mapping pour les messages communs
+  const translations = {
+    "Sorry, I didn't understand": {
+      fr: "Désolé, je n'ai pas compris",
+      es: "Lo siento, no entendí"
+    },
+    // Ajoutez d'autres traductions au besoin
+  };
+
+  for (const [key, value] of Object.entries(translations)) {
+    if (text.includes(key)) {
+      return text.replace(key, value[lang] || key);
     }
-  
-    setSessionId(newSessionId);
-    const storedMessages = getSessionMessages(newSessionId);
-  
-    if (storedMessages.length > 0) {
-      setMessages(storedMessages);
-    } else {
-      const welcomeMessage: HistoryEntry = {
-        sender: 'bot',
-        text: languageCode === 'fr' 
-          ? 'Bonjour ! Comment puis-je vous aider ?' 
-          : 'Hello! How can I help you?',
-        timestamp: new Date()
-      };
-      setMessages([welcomeMessage]);
-      storeSession(newSessionId, [welcomeMessage]);
-    }
-  }, [languageCode]);
+  }
+  return text; // Retourne le texte original si aucune traduction trouvée
+};
 
   const isComparisonRequest = (text: string): boolean => {
     const comparisonKeywords = [
@@ -331,22 +371,55 @@ const DialogflowTable = ({
   };
 
   const handleDialogflowResponse = (response: DialogflowResponse) => {
-    if (response.outputContexts) {
-      setCurrentContexts(response.outputContexts);
-    }
-  
-    const newMessage: HistoryEntry = {
-      sender: 'bot',
-      text: response.fulfillmentText,
-      details: response.payload?.details,
-      timestamp: new Date()
+  if (response.outputContexts) {
+    setCurrentContexts(response.outputContexts);
+  }
+
+  const isDefaultResponse = !response.fulfillmentText || 
+                         response.fulfillmentText.includes("I didn't understand") || 
+                         response.fulfillmentText.includes("Je n'ai pas compris");
+
+  const responseText = isDefaultResponse
+    ? languageCode === 'fr' 
+      ? "Désolé, je n'ai pas compris votre demande. Pouvez-vous reformuler ?" 
+      : languageCode === 'en' 
+      ? "Sorry, I didn't understand your request. Could you rephrase it?"
+      : "Lo siento, no entendí tu solicitud. ¿Podrías reformularla?"
+    : response.fulfillmentText;
+
+  // Extraction des détails du contexte pour les statuts
+  let details: DocumentDetails | undefined;
+  const statusContext = response.outputContexts?.find(ctx => 
+    ctx.name.includes('invoice-status') || ctx.name.includes('quotation-status')
+  );
+
+  if (statusContext) {
+    details = {
+      number: statusContext.parameters?.invoiceNumber || statusContext.parameters?.quotationNumber,
+      status: statusContext.parameters?.status,
+      amount: statusContext.parameters?.amount,
+      paidAmount: statusContext.parameters?.paidAmount,
+      date: statusContext.parameters?.date,
+      dueDate: statusContext.parameters?.dueDate,
+      currency: statusContext.parameters?.currency || 'EUR'
     };
-  
-    const updatedMessages = [...messages, newMessage];
-    setMessages(updatedMessages);
-    storeSession(sessionId, updatedMessages);
-    setIsTyping(false);
+  }
+
+  const newMessage: HistoryEntry = {
+    sender: 'bot',
+    text: responseText,
+    details: details || response.payload?.details,
+    type: statusContext?.name.includes('invoice') ? 'invoice' : 'quotation',
+    lateInvoices: response.payload?.lateInvoices,
+    invoicePayments: response.payload?.invoicePayments,
+    timestamp: new Date()
   };
+
+  const updatedMessages = [...messages, newMessage];
+  setMessages(updatedMessages);
+  storeSession(sessionId, updatedMessages);
+  setIsTyping(false);
+};
   
   const isInQuotationFlow = () => {
     return currentContexts.some(ctx => 
@@ -399,28 +472,48 @@ const DialogflowTable = ({
 
   
   const fetchAvailableArticles = async (): Promise<{id: number, quantity: number}[]> => {
-    try {
-      const response = await api.article.findPaginated(
-        1,
-        100,
-        'ASC',
-        'id',
-        '',
-        []
-      );
-      
-      // Filtrer les articles avec quantité > 0 et retourner les IDs et quantités
-      return response.data
-        .filter(article => article.quantityInStock > 0)
-        .map(article => ({
-          id: article.id,
-          quantity: article.quantityInStock
-        }));
-    } catch (error) {
-      console.error("Error fetching articles:", error);
+  try {
+    // Utilisez la méthode findPaginated de l'API article
+    const response = await api.article.findPaginated(
+      1,      // page
+      100,    // size
+      'ASC',  // order
+      'id',   // sortKey
+      '',     // search
+      []      // relations
+    );
+    
+    // Vérifier que la réponse contient bien des données
+    let articlesData: Article[] = [];
+    
+    // Gérer les différents formats de réponse
+    if (Array.isArray(response)) {
+      articlesData = response;
+    } else if (response && 'data' in response) {
+      // Si la réponse est un objet avec une propriété 'data'
+      articlesData = Array.isArray(response.data) ? response.data : [];
+    } else {
+      console.error("Format de réponse inattendu:", response);
       return [];
     }
-  };
+
+    // Filtrer les articles avec quantité > 0 et statut actif
+    return articlesData
+      .filter(article => 
+        article.quantityInStock > 0 && 
+        article.status === 'active'
+      )
+      .map(article => ({
+        id: article.id,
+        quantity: article.quantityInStock
+      }));
+      
+  } catch (error) {
+    console.error("Erreur lors de la récupération des articles:", error);
+    // Retourner une liste vide en cas d'erreur
+    return [];
+  }
+};
   const getInputPlaceholder = () => {
     if (!isInQuotationFlow()) {
       return languageCode === 'fr' 
@@ -539,40 +632,7 @@ const fetchAvailableFirms = async (): Promise<string[]> => {
   }
 };
 
-const validateUnitPrice = (input: string): { isValid: boolean; value?: number; currency?: string; error?: string } => {
-  // Expression régulière pour capturer le montant et la devise
-  const regex = /^(\d+(?:[.,]\d+)?)\s*([A-Za-z]{3})?$/;
-  const match = input.trim().match(regex);
-  
-  if (!match) {
-    return {
-      isValid: false,
-      error: languageCode === 'fr' 
-        ? "Format invalide. Utilisez '150 EUR' ou simplement '150'" 
-        : "Invalid format. Use '150 EUR' or just '150'"
-    };
-  }
 
-  const amountStr = match[1].replace(',', '.');
-  const amount = parseFloat(amountStr);
-  const currency = match[2]?.toUpperCase();
-
-  if (isNaN(amount)) {
-    return {
-      isValid: false,
-      error: languageCode === 'fr' 
-        ? "Le montant doit être un nombre valide" 
-        : "Amount must be a valid number"
-    };
-  }
-
-  return {
-    isValid: true,
-    value: amount,
-    currency: currency || 'EUR' // EUR par défaut si non spécifié
-  };
-};
-  
 // Ajoutez cet effet quelque part dans votre composant
 useEffect(() => {
   const loadFirmsIfNeeded = async () => {
@@ -895,22 +955,42 @@ const handleSubmit = async (e: React.FormEvent) => {
     try {
       setIsTyping(true);
       const response = await api.dialogflow.sendRequest({
-        languageCode,
-        queryText: `${amount} ${selectedCurrency}`,
-        sessionId,
-        parameters,
-        outputContexts: currentContexts
-      });
+  languageCode,
+  queryText,
+  sessionId,
+  parameters,
+  outputContexts: currentContexts
+});
 
-      if (response.outputContexts) {
-        setCurrentContexts(response.outputContexts);
-      }
+if (response.outputContexts) {
+  setCurrentContexts(response.outputContexts);
+}
 
-      const botMessage: HistoryEntry = {
-        sender: 'bot',
-        text: response.fulfillmentText,
-        timestamp: new Date()
-      };
+// Extraction des détails du contexte pour les statuts
+let details: DocumentDetails | undefined;
+const statusContext = response.outputContexts?.find(ctx => 
+  ctx.name.includes('invoice-status') || ctx.name.includes('quotation-status')
+);
+
+if (statusContext) {
+  details = {
+    number: statusContext.parameters?.invoiceNumber || statusContext.parameters?.quotationNumber,
+    status: statusContext.parameters?.status,
+    amount: statusContext.parameters?.amount,
+    paidAmount: statusContext.parameters?.paidAmount,
+    date: statusContext.parameters?.date,
+    dueDate: statusContext.parameters?.dueDate,
+    currency: statusContext.parameters?.currency || 'EUR'
+  };
+}
+
+const botMessage: HistoryEntry = {
+  sender: 'bot',
+  text: response.fulfillmentText,
+  details: details || response.payload?.details,
+  type: statusContext?.name.includes('invoice') ? 'invoice' : 'quotation',
+  timestamp: new Date()
+};
 
       const updatedMessages = [...messages, userMessage, botMessage];
       setMessages(updatedMessages);
@@ -1373,10 +1453,12 @@ if (isInQuotationFlow() && getCurrentStep() === 'articleId') {
   };
 
   const formatDate = (dateString?: string) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString(languageCode);
-  };
-
+  if (!dateString) return 'N/A';
+  return new Date(dateString).toLocaleDateString(
+    languageCode === 'fr' ? 'fr-FR' : 
+    languageCode === 'es' ? 'es-ES' : 'en-US'
+  );
+};
   const formatTime = (dateInput: Date | string | undefined | null) => {
     if (!dateInput) return '--:--';
     
@@ -1402,13 +1484,17 @@ if (isInQuotationFlow() && getCurrentStep() === 'articleId') {
     }
   };
 
-  const formatCurrency = (amount?: number) => {
-    if (amount === undefined) return 'N/A';
-    return new Intl.NumberFormat(languageCode === 'fr' ? 'fr-FR' : languageCode === 'es' ? 'es-ES' : 'en-US', {
+  const formatCurrency = (amount?: number, currencyCode: string = 'EUR') => {
+  if (amount === undefined) return 'N/A';
+  return new Intl.NumberFormat(
+    languageCode === 'fr' ? 'fr-FR' : 
+    languageCode === 'es' ? 'es-ES' : 'en-US', 
+    {
       style: 'currency',
-      currency: 'EUR'
-    }).format(amount);
-  };
+      currency: currencyCode
+    }
+  ).format(amount);
+};
 
   const exportHistory = () => {
     const history = {
@@ -1448,659 +1534,690 @@ if (isInQuotationFlow() && getCurrentStep() === 'articleId') {
     };
   }, []);
 
-  return (
-    <div className={cn(
-      "flex flex-col border rounded-lg overflow-hidden shadow-lg bg-white",
-      fullscreenMode ? "w-full h-full" : expandedHistory ? "h-[800px] w-[600px]" : "h-[600px] w-[400px]"
-    )}>
-      {/* Chat header */}
-      <div className="flex items-center p-4 border-b bg-primary text-primary-foreground">
-        <Avatar className="h-10 w-10">
-          <AvatarImage src="https://www.gstatic.com/mobilesdk/160503_mobilesdk/chat/chatui_2x.png" />
-          <AvatarFallback>AI</AvatarFallback>
-        </Avatar>
-        <div className="ml-3">
-          <h2 className="font-semibold">
-            {languageCode === 'fr' ? 'Assistant Virtuel' : languageCode === 'en' ? 'Virtual Assistant' : 'Asistente Virtual'}
-          </h2>
-          <p className="text-xs opacity-80">
-            {languageCode === 'fr' ? 'En ligne' : languageCode === 'en' ? 'Online' : 'En línea'}
-          </p>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="text-primary-foreground hover:bg-primary-foreground/10"
-            onClick={() => {
-              fetchHistory();
-              if (onShowFullHistory && !fullscreenMode) {
-                onShowFullHistory();
-              }
-            }}
-          >
-            <HistoryIcon className="h-4 w-4" />
-            {fullscreenMode && (
-              <span className="ml-2">
-                {languageCode === 'fr' ? 'Historique' : 'History'}
-              </span>
-            )}
-          </Button>
-          <Select 
-            value={languageCode}
-            onValueChange={(value: 'fr' | 'en' | 'es') => setLanguageCode(value)}
-          >
-            <SelectTrigger className="w-[100px] h-8 bg-primary-foreground text-primary">
-              <SelectValue placeholder="Langue" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="fr">Français</SelectItem>
-              <SelectItem value="en">English</SelectItem>
-              <SelectItem value="es">Español</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+  const copyToClipboard = (text: string) => {
+  navigator.clipboard.writeText(text).then(() => {
+    // Vous pouvez ajouter une notification ou un feedback visuel ici
+    console.log('Texte copié dans le presse-papiers');
+  }).catch(err => {
+    console.error('Erreur lors de la copie : ', err);
+  });
+};
 
-      {/* Messages container */}
-      <div className="flex-1 p-4 overflow-y-auto bg-gray-50">
-  <div className="space-y-3">
-    {messages.map((msg, index) => {
-      // Affichage de la sélection d'articles (existant)
-      // Dans le JSX, modifiez la partie qui affiche les articles
-     // Dans le JSX, modifiez la partie qui affiche les articles
-if (msg.isArticleSelection && msg.availableArticles) {
-  return (
-    <div key={index} className="flex justify-start">
-      <Avatar className="h-8 w-8 mt-1 mr-2">
-        <AvatarImage src="/bot-avatar.png" />
+ return (
+  <div className={cn(
+    "flex flex-col border rounded-lg overflow-hidden shadow-lg bg-white",
+    fullscreenMode ? "w-full h-full" : expandedHistory ? "h-[800px] w-[600px]" : "h-[600px] w-[400px]"
+  )}>
+    {/* Chat header */}
+    <div className="flex items-center p-4 border-b bg-primary text-primary-foreground">
+      <Avatar className="h-10 w-10">
+        <AvatarImage src="https://www.gstatic.com/mobilesdk/160503_mobilesdk/chat/chatui_2x.png" />
         <AvatarFallback>AI</AvatarFallback>
       </Avatar>
-      <div className="max-w-[80%]">
-        <div className="bg-white border rounded-lg px-4 py-2 rounded-tl-none">
-          <div className="text-sm mb-2">{msg.text}</div>
-          <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2">
-            {msg.availableArticles.map(article => (
-              <Button
-              key={article.id}
-              variant="outline"
-              size="sm"
-              className="text-xs"
-              disabled={article.quantity <= 0} // Désactive si quantité insuffisante
-              onClick={async () => {
-                try {
-                  const availability = await checkArticleAvailability(article.id, 1);
-                  if (!availability.available) {
-                    // Afficher message d'erreur
-                    return;
-                  }
-            
-                  // Mettre à jour le stock
-                  const updatedArticle = await updateArticleStock(article.id, -1);
-                  
-                  // Mettre à jour l'UI
-                  const newAvailableArticles = msg.availableArticles?.map(a => 
-                    a.id === article.id 
-                      ? { ...a, quantity: updatedArticle.quantityInStock }
-                      : a
-                  );
-            
-                  // Créer un nouveau message avec les quantités mises à jour
-                  const updatedMessage = {
-                    ...msg,
-                    availableArticles: newAvailableArticles
-                  };
-            
-                  // Mettre à jour les messages
-                  setMessages(prev => prev.map(m => m === msg ? updatedMessage : m));
-                  
-                  // Sélectionner l'article
-                  setQueryText(article.id.toString());
-                  const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
-                  handleSubmit(fakeEvent);
-                } catch (error) {
-                  console.error("Erreur:", error);
-                  // Afficher message d'erreur
-                }
-              }}
-            >
-              {article.id} ({languageCode === 'fr' ? 'Dispo' : 'Avail'}: {article.quantity})
-            </Button>
-            ))}
-          </div>
-          <div className="text-xs mt-2 text-right text-gray-500">
-            {formatTime(msg.timestamp)}
-          </div>
-        </div>
+      <div className="ml-3">
+        <h2 className="font-semibold">
+          {languageCode === 'fr' ? 'Assistant Virtuel' : languageCode === 'en' ? 'Virtual Assistant' : 'Asistente Virtual'}
+        </h2>
+        <p className="text-xs opacity-80">
+          {languageCode === 'fr' ? 'En ligne' : languageCode === 'en' ? 'Online' : 'En línea'}
+        </p>
+      </div>
+      <div className="ml-auto flex items-center gap-2">
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="text-primary-foreground hover:bg-primary-foreground/10"
+          onClick={() => {
+            fetchHistory();
+            if (onShowFullHistory && !fullscreenMode) {
+              onShowFullHistory();
+            }
+          }}
+        >
+          <HistoryIcon className="h-4 w-4" />
+          {fullscreenMode && (
+            <span className="ml-2">
+              {languageCode === 'fr' ? 'Historique' : 'History'}
+            </span>
+          )}
+        </Button>
+        <Select 
+          value={languageCode}
+          onValueChange={(value: 'fr' | 'en' | 'es') => setLanguageCode(value)}
+        >
+          <SelectTrigger className="w-[100px] h-8 bg-primary-foreground text-primary">
+            <SelectValue placeholder="Langue" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="fr">Français</SelectItem>
+            <SelectItem value="en">English</SelectItem>
+            <SelectItem value="es">Español</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
     </div>
-  );
-}
 
-      // Nouveau: Affichage de la sélection de firms
-      if (msg.isFirmSelection && msg.availableFirms) {
-        return (
-          <div key={index} className="flex justify-start">
-            <Avatar className="h-8 w-8 mt-1 mr-2">
-              <AvatarImage src="/bot-avatar.png" />
-              <AvatarFallback>AI</AvatarFallback>
-            </Avatar>
-            <div className="max-w-[80%]">
-              <div className="bg-white border rounded-lg px-4 py-2 rounded-tl-none">
-                <div className="text-sm mb-2">{msg.text}</div>
-                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2">
-                  {msg.availableFirms.map((firm, firmIndex) => (
-                    <Button
-                      key={`${firm}-${firmIndex}`}
-                      variant="outline"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => {
-                        setQueryText(firm);
-                        const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
-                        handleSubmit(fakeEvent);
-                      }}
-                    >
-                      {firm}
-                    </Button>
-                  ))}
-                </div>
-                <div className="text-xs mt-2 text-right text-gray-500">
-                  {formatTime(msg.timestamp)}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      }
-      // Dans le JSX, avec les autres conditions de rendu
-// Dans le JSX, avec les autres conditions de rendu
-if (msg.isStatusSelection && msg.availableStatuses) {
-  return (
-    <div key={index} className="flex justify-start">
-      <Avatar className="h-8 w-8 mt-1 mr-2">
-        <AvatarImage src="/bot-avatar.png" />
-        <AvatarFallback>AI</AvatarFallback>
-      </Avatar>
-      <div className="max-w-[80%]">
-        <div className="bg-white border rounded-lg px-4 py-2 rounded-tl-none">
-          <div className="text-sm mb-2">{msg.text}</div>
-          <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2">
-            {msg.availableStatuses.map((status, statusIndex) => (
-              <Button
-                key={`${status.value}-${statusIndex}`}
-                variant="outline"
-                size="sm"
-                className="text-xs"
-                onClick={() => {
-                  setQueryText(status.value); // Envoie la valeur au backend
-                  const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
-                  handleSubmit(fakeEvent);
-                }}
-              >
-                {status.label} {/* Affiche le label traduit */}
-              </Button>
-            ))}
-          </div>
-          <div className="text-xs mt-2 text-right text-gray-500">
-            {formatTime(msg.timestamp)}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-// Ajoutez ce bloc avec les autres conditions de rendu
-if (msg.isCurrencySelection && msg.availableCurrencies) {
-  return (
-    <div key={index} className="flex justify-start">
-      <Avatar className="h-8 w-8 mt-1 mr-2">
-        <AvatarImage src="/bot-avatar.png" />
-        <AvatarFallback>AI</AvatarFallback>
-      </Avatar>
-      <div className="max-w-[80%]">
-        <div className="bg-white border rounded-lg px-4 py-2 rounded-tl-none">
-          <div className="text-sm mb-2">{msg.text}</div>
-          <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2">
-            {msg.availableCurrencies.map((currency, currencyIndex) => (
-              <Button
-                key={`${currency}-${currencyIndex}`}
-                variant="outline"
-                size="sm"
-                className="text-xs"
-                onClick={() => {
-                  setQueryText(currency);
-                  const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
-                  handleSubmit(fakeEvent);
-                }}
-              >
-                {currency}
-              </Button>
-            ))}
-          </div>
-          <div className="text-xs mt-2 text-right text-gray-500">
-            {formatTime(msg.timestamp)}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-            const isComparisonMessage = msg.text.includes('Comparaison pour') || 
-                                      msg.text.includes('Comparison for');
-            
-            if (isComparisonMessage) {
-              return (
-                <div key={index} className="flex justify-start">
-                  <Avatar className="h-8 w-8 mt-1 mr-2">
-                    <AvatarImage src="/bot-avatar.png" />
-                    <AvatarFallback>AI</AvatarFallback>
-                  </Avatar>
-                  <div className="max-w-[80%]">
-                    <div className="bg-white border rounded-lg px-4 py-2 rounded-tl-none">
-                      <div className="text-sm whitespace-pre-line">
-                        {msg.text.split('\n').map((line, i) => (
-                          <p 
-                            key={i} 
-                            className={i === 0 ? 'font-medium' : ''}
+    {/* Messages container */}
+    <div className="flex-1 p-4 overflow-y-auto bg-gray-50">
+      <div className="space-y-3">
+        {messages.map((msg, index) => {
+          const messageId = `msg-${index}`;
+          
+          // Affichage de la sélection d'articles
+          if (msg.isArticleSelection && msg.availableArticles) {
+            return (
+              <div key={index} className="flex justify-start">
+                <Avatar className="h-8 w-8 mt-1 mr-2">
+                  <AvatarImage src="/bot-avatar.png" />
+                  <AvatarFallback>AI</AvatarFallback>
+                </Avatar>
+                <div className="max-w-[80%]">
+                  <div className="bg-white border rounded-lg px-4 py-2 rounded-tl-none">
+                    <div className="text-sm mb-2">{msg.text}</div>
+                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2">
+                      {msg.availableArticles.length > 0 ? (
+                        msg.availableArticles.map(article => (
+                          <Button
+                            key={article.id}
+                            variant="outline"
+                            size="sm"
+                            className="text-xs"
+                            disabled={article.quantity <= 0}
+                            onClick={async () => {
+                              try {
+                                const availability = await api.article.checkAvailability(
+                                  article.id, 
+                                  1
+                                );
+                                
+                                if (!availability.available) {
+                                  const errorMsg: HistoryEntry = {
+                                    sender: 'bot',
+                                    text: languageCode === 'fr' 
+                                      ? `Quantité insuffisante pour l'article ${article.id}. Stock disponible: ${availability.availableQuantity}`
+                                      : `Insufficient quantity for article ${article.id}. Available stock: ${availability.availableQuantity}`,
+                                    timestamp: new Date()
+                                  };
+                                  setMessages(prev => [...prev, errorMsg]);
+                                  return;
+                                }
+
+                                await api.article.updateArticleStock(article.id, -1);
+                                setQueryText(article.id.toString());
+                                const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                                handleSubmit(fakeEvent);
+                              } catch (error) {
+                                console.error("Erreur lors de la sélection de l'article:", error);
+                                const errorMsg: HistoryEntry = {
+                                  sender: 'bot',
+                                  text: languageCode === 'fr' 
+                                    ? "Erreur lors de la sélection de l'article. Veuillez réessayer."
+                                    : "Error selecting article. Please try again.",
+                                  timestamp: new Date()
+                                };
+                                setMessages(prev => [...prev, errorMsg]);
+                              }
+                            }}
                           >
-                            {line}
-                          </p>
-                        ))}
-                      </div>
-                      <div className="text-xs mt-1 text-right text-gray-500">
-                        {formatTime(msg.timestamp)}
-                      </div>
+                            {article.id} ({languageCode === 'fr' ? 'Dispo' : 'Avail'}: {article.quantity})
+                          </Button>
+                        ))
+                      ) : (
+                        <div className="text-sm text-gray-500">
+                          {languageCode === 'fr' 
+                            ? "Aucun article disponible" 
+                            : "No articles available"}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-xs mt-2 text-right text-gray-500">
+                      {formatTime(msg.timestamp)}
                     </div>
                   </div>
                 </div>
-              );
-            }
-            
+              </div>
+            );
+          }
+
+          // Affichage de la sélection de firms
+          if (msg.isFirmSelection && msg.availableFirms) {
             return (
-              <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                {msg.sender === 'bot' && (
-                  <Avatar className="h-8 w-8 mt-1 mr-2">
-                    <AvatarImage src="/bot-avatar.png" />
-                    <AvatarFallback>AI</AvatarFallback>
-                  </Avatar>
-                )}
-                
+              <div key={index} className="flex justify-start">
+                <Avatar className="h-8 w-8 mt-1 mr-2">
+                  <AvatarImage src="/bot-avatar.png" />
+                  <AvatarFallback>AI</AvatarFallback>
+                </Avatar>
                 <div className="max-w-[80%]">
-                  <div className={`rounded-lg px-4 py-2 ${
-                    msg.sender === 'user' 
-                      ? 'bg-primary text-primary-foreground rounded-tr-none' 
-                      : 'bg-white border rounded-tl-none'
-                  }`}>
-                    <div className="text-sm">{msg.text}</div>
-                    <div className={`text-xs mt-1 text-right ${
+                  <div className="bg-white border rounded-lg px-4 py-2 rounded-tl-none">
+                    <div className="text-sm mb-2">{msg.text}</div>
+                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2">
+                      {msg.availableFirms.map((firm, firmIndex) => (
+                        <Button
+                          key={`${firm}-${firmIndex}`}
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => {
+                            setQueryText(firm);
+                            const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                            handleSubmit(fakeEvent);
+                          }}
+                        >
+                          {firm}
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="text-xs mt-2 text-right text-gray-500">
+                      {formatTime(msg.timestamp)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // Affichage de la sélection de statuts
+          if (msg.isStatusSelection && msg.availableStatuses) {
+            return (
+              <div key={index} className="flex justify-start">
+                <Avatar className="h-8 w-8 mt-1 mr-2">
+                  <AvatarImage src="/bot-avatar.png" />
+                  <AvatarFallback>AI</AvatarFallback>
+                </Avatar>
+                <div className="max-w-[80%]">
+                  <div className="bg-white border rounded-lg px-4 py-2 rounded-tl-none">
+                    <div className="text-sm mb-2">{msg.text}</div>
+                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2">
+                      {msg.availableStatuses.map((status, statusIndex) => (
+                        <Button
+                          key={`${status.value}-${statusIndex}`}
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => {
+                            setQueryText(status.value);
+                            const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                            handleSubmit(fakeEvent);
+                          }}
+                        >
+                          {status.label}
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="text-xs mt-2 text-right text-gray-500">
+                      {formatTime(msg.timestamp)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // Affichage de la sélection de devises
+          if (msg.isCurrencySelection && msg.availableCurrencies) {
+            return (
+              <div key={index} className="flex justify-start">
+                <Avatar className="h-8 w-8 mt-1 mr-2">
+                  <AvatarImage src="/bot-avatar.png" />
+                  <AvatarFallback>AI</AvatarFallback>
+                </Avatar>
+                <div className="max-w-[80%]">
+                  <div className="bg-white border rounded-lg px-4 py-2 rounded-tl-none">
+                    <div className="text-sm mb-2">{msg.text}</div>
+                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2">
+                      {msg.availableCurrencies.map((currency, currencyIndex) => (
+                        <Button
+                          key={`${currency}-${currencyIndex}`}
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => {
+                            setQueryText(currency);
+                            const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                            handleSubmit(fakeEvent);
+                          }}
+                        >
+                          {currency}
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="text-xs mt-2 text-right text-gray-500">
+                      {formatTime(msg.timestamp)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // Affichage standard des messages
+          return (
+            <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+              {msg.sender === 'bot' && (
+                <Avatar className="h-8 w-8 mt-1 mr-2">
+                  <AvatarImage src="/bot-avatar.png" />
+                  <AvatarFallback>AI</AvatarFallback>
+                </Avatar>
+              )}
+              
+              <div className={`max-w-[80%] relative group ${msg.sender === 'user' ? 'pr-8' : 'pl-8'}`}>
+                <div className={`rounded-lg px-4 py-2 ${
+                  msg.sender === 'user' 
+                    ? 'bg-primary text-primary-foreground rounded-tr-none' 
+                    : 'bg-white border rounded-tl-none'
+                }`}>
+                  <div className="text-sm">{msg.text}</div>
+                  <div className="flex justify-between items-center mt-1">
+                    <div className={`text-xs ${
                       msg.sender === 'user' ? 'text-primary-foreground/70' : 'text-gray-500'
                     }`}>
                       {formatTime(msg.timestamp)}
                     </div>
-                  </div>
-                  
-                  {msg.details && (
-                    <Card className={`mt-2 ${msg.sender === 'user' ? 'ml-auto' : ''}`}>
-                      <CardHeader className="p-3 pb-0">
-                        <h4 className="font-medium text-sm">
-                          {msg.type === 'quotation'
-                            ? languageCode === 'fr' 
-                              ? 'Détails du devis' 
-                              : 'Quotation details'
-                            : languageCode === 'fr'
-                            ? 'Détails de la facture'
-                            : 'Invoice details'}
-                        </h4>
-                      </CardHeader>
-                      <CardContent className="p-3 pt-0 text-sm">
-                        {msg.details.number && (
-                          <p><strong>{languageCode === 'fr' ? 'Numéro' : 'Number'}:</strong> {msg.details.number}</p>
-                        )}
-                        {msg.details.amount !== undefined && (
-                          <p><strong>{languageCode === 'fr' ? 'Montant' : 'Amount'}:</strong> {formatCurrency(msg.details.amount)}</p>
-                        )}
-                        {msg.details.date && (
-                          <p><strong>{languageCode === 'fr' ? 'Date' : 'Date'}:</strong> {formatDate(msg.details.date)}</p>
-                        )}
-                        {msg.details.dueDate && (
-                          <p><strong>{languageCode === 'fr' ? 'Échéance' : 'Due date'}:</strong> {formatDate(msg.details.dueDate)}</p>
-                        )}
-                        {msg.details.status && (
-                          <p><strong>{languageCode === 'fr' ? 'Statut' : 'Status'}:</strong> {msg.details.status}</p>
-                        )}
-                        {msg.details.articleCount !== undefined && (
-                          <p><strong>{languageCode === 'fr' ? 'Articles' : 'Items'}:</strong> {msg.details.articleCount}</p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )}
-                  
-                  {msg.invoicePayments && (
-                    <InvoicePaymentsCard 
-                      payments={msg.invoicePayments} 
-                      languageCode={languageCode} 
-                    />
-                  )}
-                </div>
-
-                {msg.sender === 'user' && (
-                  <Avatar className="h-8 w-8 mt-1 ml-2">
-                    <AvatarImage src="/user-avatar.png" />
-                    <AvatarFallback>VO</AvatarFallback>
-                  </Avatar>
-                )}
-              </div>
-            );
-          })}
-          
-          {isTyping && (
-            <div className="flex justify-start">
-              <Avatar className="h-8 w-8 mt-1 mr-2">
-                <AvatarImage src="/bot-avatar.png" />
-                <AvatarFallback>AI</AvatarFallback>
-              </Avatar>
-              <div className="bg-white border rounded-lg px-4 py-2 rounded-tl-none">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                  <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                  <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          <div ref={messagesEndRef} />
-        </div>
-      </div>
-
-      {/* Input area */}
-      <form onSubmit={handleSubmit} className="p-3 border-t bg-white">
-  <div className="flex gap-2">
-    {isInQuotationFlow() && getCurrentStep() === 'unitPrice' ? (
-      <div className="flex gap-2 w-full">
-        <Input
-          type="text"
-          value={queryText}
-          onChange={(e) => setQueryText(e.target.value)}
-          placeholder={getInputPlaceholder()}
-          className="flex-1 rounded-full"
-        />
-        <Select 
-          value={selectedCurrency}
-          onValueChange={(value) => setSelectedCurrency(value)}
-        >
-          <SelectTrigger className="w-[100px]">
-            <SelectValue placeholder="Devise" />
-          </SelectTrigger>
-          <SelectContent>
-            {['EUR', 'USD', 'GBP', 'JPY'].map((currency) => (
-              <SelectItem key={currency} value={currency}>
-                {currency}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-    ) : (
-      <Input
-        type="text"
-        value={queryText}
-        onChange={(e) => {
-          const val = isInQuotationFlow() && getCurrentStep() === 'sequentialNumbr' 
-            ? e.target.value.toUpperCase() 
-            : e.target.value;
-          setQueryText(val);
-        }}
-        placeholder={getInputPlaceholder()}
-        className="flex-1 rounded-full"
-      />
-    )}
-    <Button 
-      type="submit" 
-      className="rounded-full w-12 h-12 p-0"
-      disabled={!queryText.trim()}
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="22" y1="2" x2="11" y2="13"></line>
-        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-      </svg>
-    </Button>
-  </div>
-</form>
-
-      {/* History Modal */}
-      {showHistory && (
-        <div className={cn(
-          "fixed inset-0 flex items-center justify-center z-50",
-          fullscreenMode ? "bg-background" : "bg-black/50 p-4"
-        )}>
-          <div className={cn(
-            "bg-white rounded-xl flex flex-col shadow-xl",
-            fullscreenMode ? "w-full h-full max-h-none rounded-none" : "w-full max-w-5xl h-[90vh]"
-          )}>
-            {/* Header */}
-            <div className="p-5 border-b flex justify-between items-center bg-gray-50 rounded-t-xl sticky top-0 z-10">
-              <div>
-                <h2 className="text-xl font-bold text-gray-800">
-                  {languageCode === 'fr' ? 'Historique des conversations' : 'Conversation History'}
-                </h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  Session: <span className="font-mono bg-gray-100 px-2 py-1 rounded">{sessionId}</span>
-                </p>
-              </div>
-              <div className="flex gap-2">
-                {fullscreenMode && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={onCloseFullscreen}
-                  >
-                    {languageCode === 'fr' ? 'Retour au chat' : 'Back to chat'}
-                  </Button>
-                )}
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  onClick={() => setShowHistory(false)}
-                  className="rounded-full hover:bg-gray-200"
-                >
-                  <XIcon className="h-5 w-5" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Main content */}
-            <div className="flex-1 min-h-0 flex overflow-hidden">
-              {/* Sessions sidebar */}
-<div className="min-w-[14rem] border-r flex flex-col bg-gray-50"> {/* Changement ici */}
-  <div className="p-3">
-    <Button 
-      variant="outline" 
-      size="sm" 
-      className="w-full mb-3 bg-white hover:bg-gray-100" // Ajout de bg-white et hover:bg-gray-100
-      onClick={() => {
-        const newSessionId = `session-${Date.now()}`;
-        loadSession(newSessionId, true);
-        setRefreshKey(prev => prev + 1);
-      }}
-    >
-      {languageCode === 'fr' ? '+ Nouvelle session' : '+ New session'}
-    </Button>
-    <h3 className="font-medium text-sm text-gray-500 mb-3">
-      {languageCode === 'fr' ? 'Sessions récentes' : 'Recent sessions'}
-    </h3>
-  </div>
-                <div className="flex-1 overflow-y-auto p-3 pt-0 space-y-2">
-                  {Object.entries(getStoredSessions())
-                    .sort(([, a], [, b]) => {
-                      const dateA = new Date(a.lastUpdated).getTime();
-                      const dateB = new Date(b.lastUpdated).getTime();
-                      return dateB - dateA;
-                    })
-                    .map(([id, sessionData]) => (
-                      <div 
-                        key={`${id}-${refreshKey}`}
-                        className={`group relative p-2 rounded-lg cursor-pointer text-sm ${
-                          id === sessionId 
-                            ? 'bg-blue-100 text-blue-800 font-medium' 
-                            : 'hover:bg-gray-100'
-                        }`}
-                      >
-                        <div 
-                          onClick={() => loadSession(id)}
-                          className="pr-6 truncate"
-                        >
-                          {id.startsWith('session-') 
-                            ? `${languageCode === 'fr' ? 'Session du' : 'Session from'} ${new Date(parseInt(id.split('-')[1])).toLocaleDateString()}`
-                            : id}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {new Date(sessionData.lastUpdated).toLocaleString()}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {sessionData.messages.length} {languageCode === 'fr' ? 'messages' : 'messages'}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm(languageCode === 'fr' 
-                              ? "Voulez-vous vraiment supprimer cette session ?" 
-                              : "Are you sure you want to delete this session?")) {
-                              deleteSession(id);
-                              if (id === sessionId) {
-                                const newSessionId = `session-${Date.now()}`;
-                                loadSession(newSessionId);
-                              }
-                            }
-                          }}
-                        >
-                          <XIcon className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
-                </div>
-              </div>
-
-              {/* Messages history */}
-              <div className="flex-1 flex flex-col min-h-0">
-                {/* Search bar */}
-                <div className="p-3 border-b sticky top-0 bg-white z-10">
-                  <div className="relative">
-                    <Input
-                      placeholder={languageCode === 'fr' ? "Rechercher dans l'historique..." : "Search history..."}
-                      className="pl-9"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                    <svg
-                      className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
+                    <button 
+                      onClick={() => copyToClipboard(msg.text, messageId)}
+                      className={`opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded ${
+                        msg.sender === 'user' 
+                          ? 'text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10' 
+                          : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                      }`}
+                      title={languageCode === 'fr' ? 'Copier le message' : 'Copy message'}
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
+                      {copiedId === messageId ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                      )}
+                    </button>
                   </div>
                 </div>
-
-                {/* Messages list */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                  {filteredHistory.length > 0 ? (
-                    filteredHistory.map((entry, index) => (
-                      <div key={index} className={`flex ${entry.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div 
-                          className={`max-w-[85%] rounded-xl p-4 ${
-                            entry.sender === 'user' 
-                              ? 'bg-blue-500 text-white rounded-br-none' 
-                              : 'bg-gray-100 text-gray-800 rounded-bl-none'
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            {entry.sender === 'bot' && (
-                              <Avatar className="h-8 w-8 flex-shrink-0">
-                                <AvatarImage src="/bot-avatar.png" />
-                                <AvatarFallback>AI</AvatarFallback>
-                              </Avatar>
-                            )}
-                            
-                            <div className="flex-1 min-w-0">
-                              <div className="flex justify-between items-baseline gap-2 mb-2">
-                                <span className="font-medium text-sm">
-                                  {entry.sender === 'user' 
-                                    ? (languageCode === 'fr' ? 'Vous' : 'You') 
-                                    : 'Assistant'}
-                                </span>
-                                <span className={`text-xs ${
-                                  entry.sender === 'user' ? 'text-blue-100' : 'text-gray-500'
-                                }`}>
-                                  {formatTime(entry.timestamp)}
-                                </span>
-                              </div>
-                              
-                              <div className="text-sm whitespace-pre-wrap break-words">
-                                {entry.text.split('\n').map((line, i) => (
-                                  <p key={i} className="mb-1 last:mb-0">
-                                    {line}
-                                    {line.includes('Invoice total:') && <hr className="my-2 border-gray-300/50" />}
-                                  </p>
-                                ))}
-                              </div>
-                            </div>
-                            
-                            {entry.sender === 'user' && (
-                              <Avatar className="h-8 w-8 flex-shrink-0">
-                                <AvatarImage src="/user-avatar.png" />
-                                <AvatarFallback>VO</AvatarFallback>
-                              </Avatar>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-gray-500">
-                      {languageCode === 'fr' ? 'Aucun message trouvé' : 'No messages found'}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="p-3 border-t bg-gray-50 flex justify-between items-center rounded-b-xl sticky bottom-0">
-              <div className="text-sm text-gray-500">
-                {conversationHistory.length} {languageCode === 'fr' ? 'messages' : 'messages'}
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={exportHistory}>
-                  {languageCode === 'fr' ? 'Exporter' : 'Export'}
-                </Button>
-                {!fullscreenMode && onShowFullHistory && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={onShowFullHistory}
-                  >
-                    {languageCode === 'fr' ? 'Plein écran' : 'Fullscreen'}
-                  </Button>
+                
+                {msg.details && (
+  <Card className={`mt-2 ${msg.sender === 'user' ? 'ml-auto' : ''}`}>
+    <CardHeader className="p-3 pb-0">
+      <h4 className="font-medium text-sm">
+        {msg.type === 'quotation'
+          ? languageCode === 'fr' 
+            ? 'Détails du devis' 
+            : 'Quotation details'
+          : languageCode === 'fr'
+          ? 'Détails de la facture'
+          : 'Invoice details'}
+      </h4>
+    </CardHeader>
+    <CardContent className="p-3 pt-0 text-sm space-y-1">
+      {msg.details.number && (
+        <p><strong>{languageCode === 'fr' ? 'Numéro' : 'Number'}:</strong> {msg.details.number}</p>
+      )}
+      {msg.details.status && (
+        <p>
+          <strong>{languageCode === 'fr' ? 'Statut' : 'Status'}:</strong> 
+          <span className={`ml-1 px-2 py-0.5 rounded-full text-xs ${
+            msg.details.status.toLowerCase() === 'paid' ? 'bg-green-100 text-green-800' :
+            msg.details.status.toLowerCase() === 'unpaid' ? 'bg-red-100 text-red-800' :
+            'bg-gray-100 text-gray-800'
+          }`}>
+            {msg.details.status}
+          </span>
+        </p>
+      )}
+      {msg.details.amount !== undefined && (
+        <p>
+          <strong>{languageCode === 'fr' ? 'Montant total' : 'Total amount'}:</strong> 
+          {formatCurrency(msg.details.amount, msg.details.currency)}
+        </p>
+      )}
+      {msg.details.paidAmount !== undefined && (
+        <p>
+          <strong>{languageCode === 'fr' ? 'Montant payé' : 'Paid amount'}:</strong> 
+          {formatCurrency(msg.details.paidAmount, msg.details.currency)}
+        </p>
+      )}
+      {msg.details.remainingAmount !== undefined && (
+        <p>
+          <strong>{languageCode === 'fr' ? 'Reste à payer' : 'Remaining amount'}:</strong> 
+          {formatCurrency(msg.details.remainingAmount, msg.details.currency)}
+        </p>
+      )}
+      {msg.details.date && (
+        <p><strong>{languageCode === 'fr' ? 'Date de création' : 'Creation date'}:</strong> {formatDate(msg.details.date)}</p>
+      )}
+      {msg.details.dueDate && (
+        <p><strong>{languageCode === 'fr' ? 'Date d\'échéance' : 'Due date'}:</strong> {formatDate(msg.details.dueDate)}</p>
+      )}
+    </CardContent>
+  </Card>
+)}
+                
+                {msg.invoicePayments && (
+                  <InvoicePaymentsCard 
+                    payments={msg.invoicePayments} 
+                    languageCode={languageCode} 
+                  />
                 )}
-                <Button 
-                  onClick={() => setShowHistory(false)} 
-                  size="sm"
-                >
-                  {languageCode === 'fr' ? 'Fermer' : 'Close'}
-                </Button>
+              </div>
+
+              {msg.sender === 'user' && (
+                <Avatar className="h-8 w-8 mt-1 ml-2">
+                  <AvatarImage src="/user-avatar.png" />
+                  <AvatarFallback>VO</AvatarFallback>
+                </Avatar>
+              )}
+            </div>
+          );
+        })}
+        
+        {isTyping && (
+          <div className="flex justify-start">
+            <Avatar className="h-8 w-8 mt-1 mr-2">
+              <AvatarImage src="/bot-avatar.png" />
+              <AvatarFallback>AI</AvatarFallback>
+            </Avatar>
+            <div className="bg-white border rounded-lg px-4 py-2 rounded-tl-none">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '300ms' }}></div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+        
+        <div ref={messagesEndRef} />
+      </div>
     </div>
-  );
+
+    {/* Input area */}
+    <form onSubmit={handleSubmit} className="p-3 border-t bg-white">
+      <div className="flex gap-2">
+        {isInQuotationFlow() && getCurrentStep() === 'unitPrice' ? (
+          <div className="flex gap-2 w-full">
+            <Input
+              type="text"
+              value={queryText}
+              onChange={(e) => setQueryText(e.target.value)}
+              placeholder={getInputPlaceholder()}
+              className="flex-1 rounded-full"
+            />
+            <Select 
+              value={selectedCurrency}
+              onValueChange={(value) => setSelectedCurrency(value)}
+            >
+              <SelectTrigger className="w-[100px]">
+                <SelectValue placeholder="Devise" />
+              </SelectTrigger>
+              <SelectContent>
+                {['EUR', 'USD', 'GBP', 'JPY'].map((currency) => (
+                  <SelectItem key={currency} value={currency}>
+                    {currency}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : (
+          <Input
+            type="text"
+            value={queryText}
+            onChange={(e) => {
+              const val = isInQuotationFlow() && getCurrentStep() === 'sequentialNumbr' 
+                ? e.target.value.toUpperCase() 
+                : e.target.value;
+              setQueryText(val);
+            }}
+            placeholder={getInputPlaceholder()}
+            className="flex-1 rounded-full"
+          />
+        )}
+        <Button 
+          type="submit" 
+          className="rounded-full w-12 h-12 p-0"
+          disabled={!queryText.trim()}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </Button>
+      </div>
+    </form>
+
+    {/* History Modal */}
+    {showHistory && (
+      <div className={cn(
+        "fixed inset-0 flex items-center justify-center z-50",
+        fullscreenMode ? "bg-background" : "bg-black/50 p-4"
+      )}>
+        <div className={cn(
+          "bg-white rounded-xl flex flex-col shadow-xl",
+          fullscreenMode ? "w-full h-full max-h-none rounded-none" : "w-full max-w-5xl h-[90vh]"
+        )}>
+          {/* Header */}
+          <div className="p-5 border-b flex justify-between items-center bg-gray-50 rounded-t-xl sticky top-0 z-10">
+            <div>
+              <h2 className="text-xl font-bold text-gray-800">
+                {languageCode === 'fr' ? 'Historique des conversations' : 'Conversation History'}
+              </h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Session: <span className="font-mono bg-gray-100 px-2 py-1 rounded">{sessionId}</span>
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {fullscreenMode && (
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={onCloseFullscreen}
+                >
+                  {languageCode === 'fr' ? 'Retour au chat' : 'Back to chat'}
+                </Button>
+              )}
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => setShowHistory(false)}
+                className="rounded-full hover:bg-gray-200"
+              >
+                <XIcon className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Main content */}
+          <div className="flex-1 min-h-0 flex overflow-hidden">
+            {/* Sessions sidebar */}
+            <div className="min-w-[14rem] border-r flex flex-col bg-gray-50">
+              <div className="p-3">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full mb-3 bg-white hover:bg-gray-100"
+                  onClick={() => {
+                    const newSessionId = `session-${Date.now()}`;
+                    loadSession(newSessionId, true);
+                    setRefreshKey(prev => prev + 1);
+                  }}
+                >
+                  {languageCode === 'fr' ? '+ Nouvelle session' : '+ New session'}
+                </Button>
+                <h3 className="font-medium text-sm text-gray-500 mb-3">
+                  {languageCode === 'fr' ? 'Sessions récentes' : 'Recent sessions'}
+                </h3>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 pt-0 space-y-2">
+                {Object.entries(getStoredSessions())
+                  .sort(([, a], [, b]) => {
+                    const dateA = new Date(a.lastUpdated).getTime();
+                    const dateB = new Date(b.lastUpdated).getTime();
+                    return dateB - dateA;
+                  })
+                  .map(([id, sessionData]) => (
+                    <div 
+                      key={`${id}-${refreshKey}`}
+                      className={`group relative p-2 rounded-lg cursor-pointer text-sm ${
+                        id === sessionId 
+                          ? 'bg-blue-100 text-blue-800 font-medium' 
+                          : 'hover:bg-gray-100'
+                      }`}
+                    >
+                      <div 
+                        onClick={() => loadSession(id)}
+                        className="pr-6 truncate"
+                      >
+                        {id.startsWith('session-') 
+                          ? `${languageCode === 'fr' ? 'Session du' : 'Session from'} ${new Date(parseInt(id.split('-')[1])).toLocaleDateString()}`
+                          : id}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {new Date(sessionData.lastUpdated).toLocaleString()}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {sessionData.messages.length} {languageCode === 'fr' ? 'messages' : 'messages'}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(languageCode === 'fr' 
+                            ? "Voulez-vous vraiment supprimer cette session ?" 
+                            : "Are you sure you want to delete this session?")) {
+                            deleteSession(id);
+                            if (id === sessionId) {
+                              const newSessionId = `session-${Date.now()}`;
+                              loadSession(newSessionId);
+                            }
+                          }
+                        }}
+                      >
+                        <XIcon className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* Messages history */}
+            <div className="flex-1 flex flex-col min-h-0">
+              {/* Search bar */}
+              <div className="p-3 border-b sticky top-0 bg-white z-10">
+                <div className="relative">
+                  <Input
+                    placeholder={languageCode === 'fr' ? "Rechercher dans l'historique..." : "Search history..."}
+                    className="pl-9"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <svg
+                    className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Messages list */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                {filteredHistory.length > 0 ? (
+                  filteredHistory.map((entry, index) => (
+                    <div key={index} className={`flex ${entry.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div 
+                        className={`max-w-[85%] rounded-xl p-4 ${
+                          entry.sender === 'user' 
+                            ? 'bg-blue-500 text-white rounded-br-none' 
+                            : 'bg-gray-100 text-gray-800 rounded-bl-none'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          {entry.sender === 'bot' && (
+                            <Avatar className="h-8 w-8 flex-shrink-0">
+                              <AvatarImage src="/bot-avatar.png" />
+                              <AvatarFallback>AI</AvatarFallback>
+                            </Avatar>
+                          )}
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-baseline gap-2 mb-2">
+                              <span className="font-medium text-sm">
+                                {entry.sender === 'user' 
+                                  ? (languageCode === 'fr' ? 'Vous' : 'You') 
+                                  : 'Assistant'}
+                              </span>
+                              <span className={`text-xs ${
+                                entry.sender === 'user' ? 'text-blue-100' : 'text-gray-500'
+                              }`}>
+                                {formatTime(entry.timestamp)}
+                              </span>
+                            </div>
+                            
+                            <div className="text-sm whitespace-pre-wrap break-words">
+                              {entry.text.split('\n').map((line, i) => (
+                                <p key={i} className="mb-1 last:mb-0">
+                                  {line}
+                                  {line.includes('Invoice total:') && <hr className="my-2 border-gray-300/50" />}
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          {entry.sender === 'user' && (
+                            <Avatar className="h-8 w-8 flex-shrink-0">
+                              <AvatarImage src="/user-avatar.png" />
+                              <AvatarFallback>VO</AvatarFallback>
+                            </Avatar>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex items-center justify-center h-full text-gray-500">
+                    {languageCode === 'fr' ? 'Aucun message trouvé' : 'No messages found'}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="p-3 border-t bg-gray-50 flex justify-between items-center rounded-b-xl sticky bottom-0">
+            <div className="text-sm text-gray-500">
+              {conversationHistory.length} {languageCode === 'fr' ? 'messages' : 'messages'}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={exportHistory}>
+                {languageCode === 'fr' ? 'Exporter' : 'Export'}
+              </Button>
+              {!fullscreenMode && onShowFullHistory && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={onShowFullHistory}
+                >
+                  {languageCode === 'fr' ? 'Plein écran' : 'Fullscreen'}
+                </Button>
+              )}
+              <Button 
+                onClick={() => setShowHistory(false)} 
+                size="sm"
+              >
+                {languageCode === 'fr' ? 'Fermer' : 'Close'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+);
 };
 
 export default DialogflowTable;

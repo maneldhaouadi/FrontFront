@@ -41,6 +41,8 @@ export interface ExpenseArticleInvoiceEntry extends DatabaseEntity {
   expenseArticleInvoiceEntryTaxes?: ExpenseInvoiceTaxEntry[];
   subTotal?: number;
   total?: number;
+  isFromQuotation?: boolean;
+  originalQuotationEntryId?: number;
 }
 
 export interface ExpenseCreateArticleInvoiceEntry

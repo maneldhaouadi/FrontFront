@@ -156,28 +156,28 @@ export const ExpenseQuotationControlSection = ({
   // Dans la partie des boutons
 const buttonsWithHandlers: ExpenseQuotationLifecycle[] = [
   {
-    ...EXPENSE_QUOTATION_LIFECYCLE_ACTIONS.save,
-    key: 'save',
+    ...EXPENSE_QUOTATION_LIFECYCLE_ACTIONS.draft,
+    key: 'draft',
     onClick: () => {
-      if (isInspectMode) return; // Empêche l'action en mode inspection
       setActionName(tCommon('commands.save'));
-      !!handleSubmit &&
+      !!handleSubmitDraft &&
         setAction(() => {
-          return () => handleSubmit();
+          return () => handleSubmitDraft();
         });
       setActionDialog(true);
     },
     loading: false
   },
-  // ... autres boutons avec la même logique
+  // Ne pas inclure 'save' et 'reset' en mode inspection
+  ...(!isInspectMode ? [
     {
-      ...EXPENSE_QUOTATION_LIFECYCLE_ACTIONS.draft,
-      key: 'draft',
+      ...EXPENSE_QUOTATION_LIFECYCLE_ACTIONS.save,
+      key: 'save',
       onClick: () => {
         setActionName(tCommon('commands.save'));
-        !!handleSubmitDraft &&
+        !!handleSubmit &&
           setAction(() => {
-            return () => handleSubmitDraft();
+            return () => handleSubmit();
           });
         setActionDialog(true);
       },
@@ -196,7 +196,8 @@ const buttonsWithHandlers: ExpenseQuotationLifecycle[] = [
       },
       loading: false
     }
-  ];
+  ] : [])
+].filter(Boolean); // Filtrer pour supprimer les éléments undefined
 
   const sequential = quotationManager.sequentialNumbr;
   return (
@@ -390,54 +391,59 @@ const buttonsWithHandlers: ExpenseQuotationLifecycle[] = [
         <div className="w-full py-5">
           <h1 className="font-bold">{tInvoicing('controls.include_on_quotation')}</h1>
           <div className="flex w-full items-center mt-1">
-            {/* bank details switch */}
-            <Label className="w-full">{tInvoicing('controls.bank_details')}</Label>
-            <div className="w-full m-1 text-right">
-              <Switch
-                onClick={() => {
-                  controlManager.set(
-                    'isBankAccountDetailsHidden',
-                    !controlManager.isBankAccountDetailsHidden
-                  );
-                  quotationManager.set('bankAccount', null);
-                }}
-                {...{ checked: !controlManager.isBankAccountDetailsHidden }}
-              />
-            </div>
-          </div>
+  <Label className="w-full">{tInvoicing('controls.bank_details')}</Label>
+  <div className="w-full m-1 text-right">
+    <Switch
+      disabled={isInspectMode}
+      onClick={() => {
+        if (isInspectMode) return;
+        controlManager.set(
+          'isBankAccountDetailsHidden',
+          !controlManager.isBankAccountDetailsHidden
+        );
+        quotationManager.set('bankAccount', null);
+      }}
+      {...{ checked: !controlManager.isBankAccountDetailsHidden }}
+    />
+  </div>
+</div>
           {/* article description switch */}
           <div className="flex w-full items-center mt-1">
-            <Label className="w-full">{tInvoicing('controls.article_description')}</Label>
-            <div className="w-full m-1 text-right">
-              <Switch
-                onClick={() => {
-                  articleManager.removeArticleDescription();
-                  controlManager.set(
-                    'isArticleDescriptionHidden',
-                    !controlManager.isArticleDescriptionHidden
-                  );
-                }}
-                {...{ checked: !controlManager.isArticleDescriptionHidden }}
-              />
-            </div>
-          </div>
+  <Label className="w-full">{tInvoicing('controls.article_description')}</Label>
+  <div className="w-full m-1 text-right">
+    <Switch
+      disabled={isInspectMode}
+      onClick={() => {
+        if (isInspectMode) return;
+        articleManager.removeArticleDescription();
+        controlManager.set(
+          'isArticleDescriptionHidden',
+          !controlManager.isArticleDescriptionHidden
+        );
+      }}
+      {...{ checked: !controlManager.isArticleDescriptionHidden }}
+    />
+  </div>
+</div>
           {/* invoicing address switch */}
           {/* general condition switch */}
           <div className="flex w-full items-center mt-1">
-            <Label className="w-full">{tInvoicing('quotation.attributes.general_condition')}</Label>
-            <div className="w-full m-1 text-right">
-              <Switch
-                onClick={() => {
-                  quotationManager.set('generalConditions', '');
-                  controlManager.set(
-                    'isGeneralConditionsHidden',
-                    !controlManager.isGeneralConditionsHidden
-                  );
-                }}
-                {...{ checked: !controlManager.isGeneralConditionsHidden }}
-              />
-            </div>
-          </div>
+  <Label className="w-full">{tInvoicing('quotation.attributes.general_condition')}</Label>
+  <div className="w-full m-1 text-right">
+    <Switch
+      disabled={isInspectMode}
+      onClick={() => {
+        if (isInspectMode) return;
+        quotationManager.set('generalConditions', '');
+        controlManager.set(
+          'isGeneralConditionsHidden',
+          !controlManager.isGeneralConditionsHidden
+        );
+      }}
+      {...{ checked: !controlManager.isGeneralConditionsHidden }}
+    />
+  </div>
+</div>
         </div>
       </div>
     </>
