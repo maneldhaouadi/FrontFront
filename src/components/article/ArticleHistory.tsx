@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { MoreHorizontal, Trash2, Download, Undo2, CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const ArticleHistoryList = ({ articleId }: { articleId: number }) => {
   const { t } = useTranslation('articleHistory');
@@ -36,8 +37,8 @@ const ArticleHistoryList = ({ articleId }: { articleId: number }) => {
       const activeVersion = data?.find(item => item.isActive);
       setCurrentActiveVersion(activeVersion?.version || null);
     } catch (err) {
-      console.error("Fetch error:", err);
-      toast.error(t('error_fetching_history'));
+      console.error("Erreur de récupération:", err);
+      toast.error(t('erreur_recuperation_historique'));
     } finally {
       setLoading(false);
     }
@@ -46,36 +47,36 @@ const ArticleHistoryList = ({ articleId }: { articleId: number }) => {
   const handleDownloadPdf = async (articleId: number, version: number) => {
     try {
       await articleHistory.downloadPdf(articleId, version);
-      toast.success(t('pdf_downloaded'));
+      toast.success(t('pdf_telecharge'));
     } catch (err) {
-      console.error("Download error:", err);
-      toast.error(t('error_downloading_pdf'));
+      console.error("Erreur de téléchargement:", err);
+      toast.error(t('erreur_telechargement_pdf'));
     }
   };
 
   const handleRestoreVersion = async (version: number) => {
-    if (!window.confirm(t('confirm_restore', { version }))) return;
+    if (!window.confirm(t('confirmer_restauration', { version }))) return;
     
     try {
       await api.article.restoreVersion(articleId, version);
-      toast.success(t('version_restored'));
+      toast.success(t('version_restauree'));
       fetchArticleHistory();
     } catch (err) {
-      console.error("Restore error:", err);
-      toast.error(t('error_restoring'));
+      console.error("Erreur de restauration:", err);
+      toast.error(t('erreur_restauration'));
     }
   };
 
   const handleDeleteVersion = async (version: number) => {
-    if (!window.confirm(t('confirm_delete_version', { version }))) return;
+    if (!window.confirm(t('confirmer_suppression_version', { version }))) return;
     
     try {
       await articleHistory.deleteVersion(articleId, version); 
-      toast.success(t('version_deleted'));
+      toast.success(t('version_supprimee'));
       fetchArticleHistory();
     } catch (err) {
-      console.error("Delete error:", err);
-      toast.error(t('error_deleting_version'));
+      console.error("Erreur de suppression:", err);
+      toast.error(t('erreur_suppression_version'));
     }
   };
 
@@ -124,7 +125,7 @@ const ArticleHistoryList = ({ articleId }: { articleId: number }) => {
     },
     {
       accessorKey: 'changes',
-      header: t('changes'),
+      header: t('modifications'),
       cell: ({ row }) => {
         const filteredChanges = Object.entries(row.original.changes)
           .filter(([field]) => validArticleFields.includes(field))
@@ -143,7 +144,7 @@ const ArticleHistoryList = ({ articleId }: { articleId: number }) => {
 
               return (
                 <div key={field} className="flex items-center gap-2">
-                  <span className="font-medium">{t(`field.${field}`)}:</span>
+                  <span className="font-medium">{t(`${field}`)}:</span>
                   {oldValue !== 'N/A' ? (
                     <span className="text-muted-foreground">
                       {oldValue}
@@ -182,7 +183,7 @@ const ArticleHistoryList = ({ articleId }: { articleId: number }) => {
                 className="cursor-pointer"
               >
                 <Undo2 className="mr-2 h-4 w-4" />
-                {t('restore_version')}
+                {t('restaurer_version')}
               </DropdownMenuItem>
             )}
             <DropdownMenuItem
@@ -190,7 +191,7 @@ const ArticleHistoryList = ({ articleId }: { articleId: number }) => {
               className="cursor-pointer"
             >
               <Download className="mr-2 h-4 w-4" />
-              {t('download_pdf')}
+              {t('telecharger_pdf')}
             </DropdownMenuItem>
             {!row.original.isActive && (
               <DropdownMenuItem
@@ -198,7 +199,7 @@ const ArticleHistoryList = ({ articleId }: { articleId: number }) => {
                 className="cursor-pointer text-red-600"
               >
                 <Trash2 className="mr-2 h-4 w-4" />
-                {t('delete_version')}
+                {t('supprimer_version')}
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>
@@ -210,7 +211,7 @@ const ArticleHistoryList = ({ articleId }: { articleId: number }) => {
   if (loading) return <Spinner className="mx-auto my-8" />;
 
   return (
-    <Card className="shadow-sm border-gray-200">
+    <Card className="flex flex-col h-[calc(100vh-180px)] shadow-sm border-gray-200">
       <CardHeader className="flex flex-row items-center justify-between border-b border-gray-200 pb-3">
         <CardTitle className="text-lg font-semibold text-gray-800">
           {t('Historique de l\'article')}
@@ -222,12 +223,14 @@ const ArticleHistoryList = ({ articleId }: { articleId: number }) => {
           </Badge>
         )}
       </CardHeader>
-      <CardContent>
-        <DataTable
-          columns={columns}
-          data={history}
-          emptyMessage={t('no_history_found')}
-        />
+      <CardContent className="p-6 flex-1 overflow-hidden">
+        <ScrollArea className="h-full pr-4">
+          <DataTable
+            columns={columns}
+            data={history}
+            emptyMessage={t('aucun_historique_trouve')}
+          />
+        </ScrollArea>
       </CardContent>
     </Card>
   );

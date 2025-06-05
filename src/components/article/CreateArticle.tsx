@@ -24,7 +24,6 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/common/Spinner';
 import { useBreadcrumb } from '@/components/layout/BreadcrumbContext';
-import { FileUploader } from '@/components/ui/file-uploader';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PackagePlus, ImageIcon, FileTextIcon } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -47,14 +46,13 @@ const CreateArticlePage = () => {
     notes: ''
   });
 
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
-  const [justificatifFile, setJustificatifFile] = useState<File | null>(null);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrResult, setOcrResult] = useState<ArticleExtractedData | null>(null);
   const [ocrError, setOcrError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<FormTab>('form');
 
-  // Configuration des breadcrumbs
   useEffect(() => {
     setRoutes([
       { title: t('Gestion des stocks'), href: '/articles' },
@@ -63,7 +61,47 @@ const CreateArticlePage = () => {
     ]);
   }, [t, setRoutes]);
 
-  // Formatage de la référence
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+
+    // Seuls ces deux champs sont obligatoires
+    if (!formData.title.trim()) {
+      newErrors.title = t('Le titre est obligatoire');
+    } else if (formData.title.length > 100) {
+      newErrors.title = t('Le titre ne doit pas dépasser 100 caractères');
+    }
+
+    if (!formData.reference.trim()) {
+      newErrors.reference = t('La référence est obligatoire');
+    } else if (!/^REF-\d{6}(-\d{3})?$/.test(formData.reference)) {
+      newErrors.reference = t('Format invalide (ex: REF-123456-789)');
+    }
+
+    // Les champs suivants ne sont pas obligatoires mais ont des validations
+    if (formData.unitPrice < 0) {
+      newErrors.unitPrice = t('Le prix ne peut pas être négatif');
+    } else if (formData.unitPrice > 1000000) {
+      newErrors.unitPrice = t('Le prix est trop élevé');
+    }
+
+    if (formData.quantityInStock < 0) {
+      newErrors.quantityInStock = t('La quantité ne peut pas être négative');
+    } else if (formData.quantityInStock > 1000000) {
+      newErrors.quantityInStock = t('La quantité est trop élevée');
+    }
+
+    if (formData.description.length > 1000) {
+      newErrors.description = t('La description ne doit pas dépasser 1000 caractères');
+    }
+
+    if (formData.notes.length > 500) {
+      newErrors.notes = t('Les notes ne doivent pas dépasser 500 caractères');
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const formatReference = (value: string): string => {
     if (value.length < 4 && !value.startsWith('REF-')) {
       return 'REF-';
@@ -110,25 +148,25 @@ const CreateArticlePage = () => {
     }));
   };
 
-  // Soumission du formulaire
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!validateForm()) {
+      toast.error(t('Veuillez corriger les erreurs dans le formulaire'));
+      return;
+    }
+    
     setIsLoading(true);
     
     try {
       const numericReference = formData.reference.replace('REF-', '').replace(/-/g, '');
       const formDataToSend = new FormData();
       
-      // Ajout des champs au FormData
       Object.entries(formData).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
           formDataToSend.append(key, value.toString());
         }
       });
-      
-      if (justificatifFile) {
-        formDataToSend.append('justificatifFile', justificatifFile);
-      }
 
       const result = await api.article.create(formDataToSend);
       if (result) {
@@ -143,7 +181,6 @@ const CreateArticlePage = () => {
     }
   };
 
-  // Réinitialisation du formulaire
   const handleReset = useCallback(() => {
     setFormData({
       title: '',
@@ -154,13 +191,12 @@ const CreateArticlePage = () => {
       status: 'draft',
       notes: '',
     });
-    setJustificatifFile(null);
+    setErrors({});
     setOcrResult(null);
     setOcrError(null);
     setActiveTab('form');
   }, []);
 
-  // Extraction des données depuis un fichier (PDF ou image)
   const handleExtractFromFile = useCallback(async (file: File, isPdf = false) => {
     setOcrLoading(true);
     setOcrError(null);
@@ -170,8 +206,6 @@ const CreateArticlePage = () => {
       
       if (isPdf) {
         const response = await api.article.extractFromPdf(file);
-        
-        // Transformation des données pour correspondre à ArticleExtractedData
         result = {
           reference: response.reference || '',
           title: response.title || '',
@@ -218,7 +252,6 @@ const CreateArticlePage = () => {
     }
   }, [formData.reference, t]);
 
-  // Application des résultats OCR au formulaire
   const applyOcrResult = useCallback(() => {
     if (!ocrResult) return;
     
@@ -238,7 +271,6 @@ const CreateArticlePage = () => {
     toast.success(t('Informations appliquées avec succès'));
   }, [ocrResult, t]);
 
-  // Gestion du téléchargement de fichiers
   const handleFileUpload = useCallback(
     (type: 'image' | 'pdf') => (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files?.[0]) {
@@ -333,7 +365,7 @@ const CreateArticlePage = () => {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-4">
                           <div>
-                            <Label htmlFor="title">{t('Titre')}</Label>
+                            <Label htmlFor="title">{t('Titre')} *</Label>
                             <Input
                               id="title"
                               name="title"
@@ -341,8 +373,10 @@ const CreateArticlePage = () => {
                               onChange={handleChange}
                               placeholder={t('Nom de l\'article')}
                               className="h-10"
-                              required
                             />
+                            {errors.title && (
+                              <p className="text-xs text-red-500 mt-1">{errors.title}</p>
+                            )}
                           </div>
                           
                           <div>
@@ -355,12 +389,15 @@ const CreateArticlePage = () => {
                               rows={4}
                               placeholder={t('Description détaillée de l\'article')}
                             />
+                            {errors.description && (
+                              <p className="text-xs text-red-500 mt-1">{errors.description}</p>
+                            )}
                           </div>
                         </div>
                         
                         <div className="space-y-4">
                           <div>
-                            <Label htmlFor="reference">{t('Référence')}</Label>
+                            <Label htmlFor="reference">{t('Référence')} *</Label>
                             <Input
                               id="reference"
                               name="reference"
@@ -368,11 +405,14 @@ const CreateArticlePage = () => {
                               onChange={handleReferenceChange}
                               placeholder="REF-123456-789"
                               className="h-10"
-                              required
                             />
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {t('Format: REF-123456-789')}
-                            </p>
+                            {errors.reference ? (
+                              <p className="text-xs text-red-500 mt-1">{errors.reference}</p>
+                            ) : (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {t('Format: REF-123456-789')}
+                              </p>
+                            )}
                           </div>
                           
                           <div>
@@ -416,6 +456,9 @@ const CreateArticlePage = () => {
                             placeholder={t('Prix en euros')}
                             className="h-10"
                           />
+                          {errors.unitPrice && (
+                            <p className="text-xs text-red-500 mt-1">{errors.unitPrice}</p>
+                          )}
                         </div>
                         
                         <div>
@@ -430,6 +473,9 @@ const CreateArticlePage = () => {
                             placeholder={t('Nombre disponible')}
                             className="h-10"
                           />
+                          {errors.quantityInStock && (
+                            <p className="text-xs text-red-500 mt-1">{errors.quantityInStock}</p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -449,23 +495,9 @@ const CreateArticlePage = () => {
                             rows={3}
                             placeholder={t('Informations supplémentaires pour votre équipe')}
                           />
-                        </div>
-                        
-                        <div>
-                          <Label>{t('Justificatif')}</Label>
-                          <FileUploader
-                            accept={{
-                              'image/*': [],
-                              'application/pdf': [],
-                              'application/vnd.openxmlformats-officedocument.wordprocessingml.document': [],
-                              'application/msword': [],
-                            }}
-                            maxFileCount={1}
-                            value={justificatifFile ? [justificatifFile] : []}
-                            onValueChange={(files) => {
-                              setJustificatifFile(files.length > 0 ? files[0] : null);
-                            }}
-                          />
+                          {errors.notes && (
+                            <p className="text-xs text-red-500 mt-1">{errors.notes}</p>
+                          )}
                         </div>
                       </div>
                     </div>

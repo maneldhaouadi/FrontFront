@@ -324,36 +324,7 @@ const ArticleDetails: React.FC = () => {
           </div>
         </div>
         
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            className="flex items-center gap-2"
-            onClick={handleCompareWithPdf}
-          >
-            <FileText className="h-4 w-4" />
-            Comparer avec PDF
-          </Button>
-          
-          <Button 
-            variant="outline" 
-            className="flex items-center gap-2"
-            onClick={handleCompareWithImage}
-          >
-            <Image className="h-4 w-4" />
-            Comparer avec Image
-          </Button>
 
-          {articleDetails.justificatifFile && (
-            <Button
-              variant="outline"
-              onClick={handleDownloadJustificatif}
-              className="flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Télécharger
-            </Button>
-          )}
-        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

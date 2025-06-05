@@ -24,13 +24,12 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/common/Spinner';
 import { useBreadcrumb } from '@/components/layout/BreadcrumbContext';
-import { FileUploader } from '@/components/ui/file-uploader';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PackagePlus, ImageIcon, FileTextIcon, Save, X, Check, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 type FormTab = 'form' | 'review';
 
@@ -40,7 +39,7 @@ const statusOptions = [
   { value: 'inactive', label: 'Inactif' },
   { value: 'archived', label: 'Archivé' },
   { value: 'out_of_stock', label: 'Rupture de stock' }
-];
+] as const;
 
 interface FieldDifference {
   field: keyof UpdateArticleDto;
@@ -70,7 +69,6 @@ const ArticleEdit: React.FC = () => {
     version: 1
   });
 
-  const [justificatifFile, setJustificatifFile] = useState<File | null>(null);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrResult, setOcrResult] = useState<ArticleExtractedData | null>(null);
   const [ocrError, setOcrError] = useState<string | null>(null);
@@ -95,14 +93,14 @@ const ArticleEdit: React.FC = () => {
           title: response.title || '',
           description: response.description || '',
           reference: response.reference ? `REF-${response.reference}` : 'REF-',
-          quantityInStock: response.quantityInStock,
+          quantityInStock: Number(response.quantityInStock) || 0,
           status: response.status,
-          unitPrice: response.unitPrice,
+          unitPrice: Number(response.unitPrice) || 0,
           notes: response.notes || '',
-          version: response.version || 1
+          version: Number(response.version) || 1
         });
       } catch (error) {
-        setError('Could not fetch article details');
+        setError(t('Error fetching article details'));
         toast.error(t('Error fetching article details'));
         console.error('Fetch error:', error);
       } finally {
@@ -113,7 +111,7 @@ const ArticleEdit: React.FC = () => {
     fetchArticleDetails();
   }, [id, t, setRoutes]);
 
-  const formatReference = (value: string): string => {
+  const formatReference = useCallback((value: string): string => {
     if (value.length < 4 && !value.startsWith('REF-')) {
       return 'REF-';
     }
@@ -132,19 +130,19 @@ const ArticleEdit: React.FC = () => {
     }
     
     return formattedValue;
-  };
+  }, []);
 
   const handleReferenceChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const formattedValue = formatReference(e.target.value);
     setFormData(prev => ({ ...prev, reference: formattedValue }));
-  }, []);
+  }, [formatReference]);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const { name, value } = e.target;
       setFormData(prev => ({
         ...prev,
-        [name]: ['unitPrice', 'quantityInStock'].includes(name) 
+        [name]: ['unitPrice', 'quantityInStock', 'version'].includes(name) 
           ? Number(value) || 0 
           : value
       }));
@@ -164,7 +162,7 @@ const ArticleEdit: React.FC = () => {
       toast.error(t('Le titre est obligatoire'));
       return false;
     }
-    if (!formData.reference.trim()) {
+    if (!formData.reference.trim() || formData.reference === 'REF-') {
       toast.error(t('La référence est obligatoire'));
       return false;
     }
@@ -181,42 +179,29 @@ const ArticleEdit: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!validateForm() || !id) return;
 
     try {
       setSubmitting(true);
 
-      const formDataToSend = new FormData();
-      
-      // Ajoute tous les champs au FormData
-      Object.entries(formData).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          formDataToSend.append(key, value.toString());
-        }
-      });
-
-      // Correction du format de la référence
       const numericReference = formData.reference.replace('REF-', '').replace('-', '');
-      formDataToSend.set('reference', numericReference);
+      const payload = {
+        ...formData,
+        reference: numericReference,
+        quantityInStock: Number(formData.quantityInStock),
+        unitPrice: Number(formData.unitPrice),
+        version: Number(formData.version)
+      };
 
-      // Ajoute le fichier justificatif s'il existe
-      if (justificatifFile) {
-        formDataToSend.append('justificatifFile', justificatifFile);
-      }
-
-      const updatedArticle = await api.article.update(Number(id), formDataToSend);
+      const updatedArticle = await api.article.update(Number(id), payload);
       setArticleDetails(updatedArticle);
       toast.success(t('Article mis à jour avec succès'));
       router.push(`/article/article-details/${id}`);
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const errorMessage = error.response?.data?.message || t('Échec de la mise à jour');
-        console.error('Update error details:', error.response?.data);
-        toast.error(`Erreur: ${errorMessage}`);
-      } else {
-        console.error('Update error:', error);
-        toast.error(t('Une erreur inattendue est survenue'));
-      }
+      const err = error as AxiosError;
+      const errorMessage = err.response?.data?.message || t('Échec de la mise à jour');
+      console.error('Update error details:', err.response?.data);
+      toast.error(`Erreur: ${errorMessage}`);
     } finally {
       setSubmitting(false);
     }
@@ -228,7 +213,7 @@ const ArticleEdit: React.FC = () => {
     }
   };
 
-  const findDifferences = (currentData: UpdateArticleDto, extractedData: ArticleExtractedData): FieldDifference[] => {
+  const findDifferences = useCallback((currentData: UpdateArticleDto, extractedData: ArticleExtractedData): FieldDifference[] => {
     const diffs: FieldDifference[] = [];
     
     const fieldsToCompare: (keyof UpdateArticleDto)[] = [
@@ -240,12 +225,10 @@ const ArticleEdit: React.FC = () => {
       const currentValue = currentData[field];
       let extractedValue = extractedData[field as keyof ArticleExtractedData];
 
-      // Normalisation des valeurs
       if (typeof currentValue === 'string' && typeof extractedValue === 'string') {
         extractedValue = extractedValue.trim();
       }
 
-      // Comparaison numérique avec tolérance
       if (['unitPrice', 'quantityInStock'].includes(field)) {
         if (Math.abs(Number(currentValue) - Number(extractedValue)) > 0.01) {
           diffs.push({
@@ -256,7 +239,6 @@ const ArticleEdit: React.FC = () => {
           });
         }
       } 
-      // Comparaison textuelle
       else if (JSON.stringify(currentValue) !== JSON.stringify(extractedValue)) {
         diffs.push({
           field,
@@ -268,7 +250,7 @@ const ArticleEdit: React.FC = () => {
     });
 
     return diffs;
-  };
+  }, []);
 
   const handleExtractFromFile = useCallback(async (file: File, isPdf = false) => {
     setOcrLoading(true);
@@ -287,8 +269,8 @@ const ArticleEdit: React.FC = () => {
         ...result,
         reference: formattedReference,
         title: result.title || file.name.replace(/\.[^/.]+$/, ""),
-        unitPrice: result.unitPrice || 0,
-        quantityInStock: result.quantityInStock || 0,
+        unitPrice: Number(result.unitPrice) || 0,
+        quantityInStock: Number(result.quantityInStock) || 0,
         description: result.description || '',
         notes: result.notes || ''
       };
@@ -310,48 +292,54 @@ const ArticleEdit: React.FC = () => {
     } finally {
       setOcrLoading(false);
     }
-  }, [formData, t]);
+  }, [formData, t, findDifferences]);
 
-  const applyFieldValue = (field: keyof UpdateArticleDto, value: any) => {
+  const applyFieldValue = useCallback((field: keyof UpdateArticleDto, value: any) => {
     setFormData(prev => ({
       ...prev,
-      [field]: value
+      [field]: ['unitPrice', 'quantityInStock'].includes(field) 
+        ? Number(value) || 0 
+        : value
     }));
-  };
+  }, []);
 
-  const toggleFieldSelection = (index: number) => {
+  const toggleFieldSelection = useCallback((index: number) => {
     setDifferences(prev => {
       const newDiffs = [...prev];
       newDiffs[index].selected = !newDiffs[index].selected;
       return newDiffs;
     });
-  };
+  }, []);
 
-  const applyAllNewValues = () => {
+  const applyAllNewValues = useCallback(() => {
     setFormData(prev => {
       const newData = { ...prev };
       differences.forEach(diff => {
-        newData[diff.field] = diff.extractedValue;
+        newData[diff.field] = ['unitPrice', 'quantityInStock'].includes(diff.field)
+          ? Number(diff.extractedValue) || 0
+          : diff.extractedValue;
       });
       return newData;
     });
     toast.success(t('Toutes les nouvelles valeurs ont été appliquées'));
     setActiveTab('form');
-  };
+  }, [differences, t]);
 
-  const applySelectedValues = () => {
+  const applySelectedValues = useCallback(() => {
     setFormData(prev => {
       const newData = { ...prev };
       differences.forEach(diff => {
         if (diff.selected) {
-          newData[diff.field] = diff.extractedValue;
+          newData[diff.field] = ['unitPrice', 'quantityInStock'].includes(diff.field)
+            ? Number(diff.extractedValue) || 0
+            : diff.extractedValue;
         }
       });
       return newData;
     });
     toast.success(t('Les valeurs sélectionnées ont été appliquées'));
     setActiveTab('form');
-  };
+  }, [differences, t]);
 
   const handleFileUpload = useCallback(
     (type: 'image' | 'pdf') => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -471,8 +459,6 @@ const ArticleEdit: React.FC = () => {
                     onChange={handleChange}
                     onReferenceChange={handleReferenceChange}
                     onStatusChange={handleStatusChange}
-                    justificatifFile={justificatifFile}
-                    setJustificatifFile={setJustificatifFile}
                   />
                 </ScrollArea>
               </TabsContent>
@@ -494,15 +480,15 @@ const ArticleEdit: React.FC = () => {
                     ) : (
                       <div className="space-y-6">
                         {differences.map((diff, index) => (
-                          <div key={diff.field} className="border rounded-md p-4">
+                          <div key={`${diff.field}-${index}`} className="border rounded-md p-4">
                             <div className="flex items-center justify-between mb-3">
                               <div className="flex items-center gap-3">
                                 <Checkbox
-                                  id={`select-${diff.field}`}
+                                  id={`select-${diff.field}-${index}`}
                                   checked={diff.selected || false}
                                   onCheckedChange={() => toggleFieldSelection(index)}
                                 />
-                                <Label htmlFor={`select-${diff.field}`} className="font-medium capitalize cursor-pointer">
+                                <Label htmlFor={`select-${diff.field}-${index}`} className="font-medium capitalize cursor-pointer">
                                   {t(diff.field)}
                                 </Label>
                               </div>
@@ -618,20 +604,18 @@ const ArticleEdit: React.FC = () => {
   );
 };
 
-const ArticleForm = ({
-  formData,
-  onChange,
-  onReferenceChange,
-  onStatusChange,
-  justificatifFile,
-  setJustificatifFile
-}: {
+interface ArticleFormProps {
   formData: UpdateArticleDto;
   onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   onReferenceChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onStatusChange: (value: ArticleStatus) => void;
-  justificatifFile: File | null;
-  setJustificatifFile: (file: File | null) => void;
+}
+
+const ArticleForm: React.FC<ArticleFormProps> = ({
+  formData,
+  onChange,
+  onReferenceChange,
+  onStatusChange
 }) => {
   const { t } = useTranslation('article');
 
@@ -696,11 +680,11 @@ const ArticleForm = ({
                   <SelectValue placeholder={t('Sélectionner un statut')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="draft">{t('Brouillon')}</SelectItem>
-                  <SelectItem value="active">{t('Actif')}</SelectItem>
-                  <SelectItem value="inactive">{t('Inactif')}</SelectItem>
-                  <SelectItem value="archived">{t('Archivé')}</SelectItem>
-                  <SelectItem value="out_of_stock">{t('En rupture')}</SelectItem>
+                  {statusOptions.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -760,23 +744,6 @@ const ArticleForm = ({
               onChange={onChange}
               rows={3}
               placeholder={t('Informations supplémentaires pour votre équipe')}
-            />
-          </div>
-          
-          <div>
-            <Label>{t('Justificatif')}</Label>
-            <FileUploader
-              accept={{
-                'image/*': [],
-                'application/pdf': [],
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document': [],
-                'application/msword': [],
-              }}
-              maxFileCount={1}
-              value={justificatifFile ? [justificatifFile] : []}
-              onValueChange={(files) => {
-                setJustificatifFile(files.length > 0 ? files[0] : null);
-              }}
             />
           </div>
         </div>

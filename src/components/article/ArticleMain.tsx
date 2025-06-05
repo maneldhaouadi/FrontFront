@@ -37,7 +37,6 @@ const ArticleList: React.FC = () => {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrSearchTerm, setOcrSearchTerm] = useState('');
 
-  // Optimized query with debounced search
   const {
     data: articles = [],
     isLoading,
@@ -48,13 +47,11 @@ const ArticleList: React.FC = () => {
     queryFn: async () => {
       const data = await api.article.findActiveArticles();
       return data.filter(article => {
-        // Regular search
         const matchesRegularSearch = searchTerm 
           ? article.title?.toLowerCase().includes(searchTerm.toLowerCase()) || 
             article.reference?.toLowerCase().includes(searchTerm.toLowerCase())
           : true;
         
-        // OCR search (only if ocrSearchTerm is present)
         const matchesOcrSearch = ocrSearchTerm
           ? article.title?.toLowerCase().includes(ocrSearchTerm.toLowerCase()) ||
             article.description?.toLowerCase().includes(ocrSearchTerm.toLowerCase()) ||
@@ -64,10 +61,9 @@ const ArticleList: React.FC = () => {
         return matchesRegularSearch && matchesOcrSearch;
       });
     },
-    staleTime: 1000 * 60 * 5, // 5 minutes cache
+    staleTime: 1000 * 60 * 5,
   });
 
-  // Memoized pagination calculations
   const { paginatedArticles, pageCount } = useMemo(() => {
     const startIndex = (page - 1) * pageSize;
     const endIndex = page * pageSize;
@@ -77,19 +73,17 @@ const ArticleList: React.FC = () => {
     };
   }, [articles, page, pageSize]);
 
-  // Reset to first page when search changes
   useEffect(() => {
     setPage(1);
   }, [searchTerm, ocrSearchTerm]);
 
-  // Handle page overflow
   useEffect(() => {
     if (articles.length > 0 && paginatedArticles.length === 0 && page > 1) {
       setPage(page - 1);
     }
   }, [articles, paginatedArticles, page]);
 
-  // Delete article mutation with optimistic updates
+  // Mutation de suppression optimisée
   const { mutate: removeArticle, isLoading: isDeleting } = useMutation({
     mutationFn: (id: number) => api.article.remove(id),
     onMutate: async (id) => {
@@ -104,6 +98,7 @@ const ArticleList: React.FC = () => {
     },
     onSuccess: () => {
       toast.success(t('article.action_remove_success'));
+      queryClient.invalidateQueries(['active-articles']);
     },
     onError: (err, id, context: any) => {
       queryClient.setQueryData(['active-articles'], context.previousArticles);
@@ -111,7 +106,6 @@ const ArticleList: React.FC = () => {
     },
     onSettled: () => {
       queryClient.invalidateQueries(['active-articles']);
-      queryClient.invalidateQueries(['archived-articles']);
     }
   });
 
@@ -174,23 +168,22 @@ const ArticleList: React.FC = () => {
     [handleExtractFromFile]
   );
 
+  const handleConfirmDelete = useCallback(async () => {
+    if (!articleToDelete) return;
+
+    try {
+      await removeArticle(articleToDelete);
+      setDeleteDialogOpen(false);
+      setArticleToDelete(null);
+    } catch (error) {
+      console.error("Delete error:", error);
+    }
+  }, [articleToDelete, removeArticle]);
+
   const openDeleteDialog = useCallback((id: number) => {
     setArticleToDelete(id);
     setDeleteDialogOpen(true);
   }, []);
-
-  const handleConfirmDelete = useCallback(async () => {
-    if (articleToDelete) {
-      try {
-        await removeArticle(articleToDelete);
-        setDeleteDialogOpen(false);
-        setArticleToDelete(null);
-      } catch (error) {
-        console.error("Delete error:", error);
-        toast.error(t('article.action_remove_failure'));
-      }
-    }
-  }, [articleToDelete, removeArticle, t]);
 
   const openDuplicateDialog = useCallback((id: number) => {
     if (window.confirm(t('article.confirm_duplicate'))) {
@@ -227,7 +220,6 @@ const ArticleList: React.FC = () => {
     setOcrSearchTerm('');
   }, []);
 
-  // Memoized context value
   const contextValue = useMemo(() => ({
     openDeleteDialog,
     openDuplicateDialog,
@@ -285,18 +277,9 @@ const ArticleList: React.FC = () => {
             </div>
             <div className="flex gap-2">
               <Button 
-                variant="outline"
                 size="sm"
                 className="h-8 px-4 text-sm flex items-center gap-1.5"
-                onClick={goToArchive}
-              >
-                <Archive className="h-3.5 w-3.5" />
-                <span>{t('Archives')}</span>
-              </Button>
-              <Button 
-                size="sm"
-                className="h-8 px-4 text-sm flex items-center gap-1.5"
-                onClick={() => router.push('/articles/create')}
+                onClick={() => router.push('/article/create-article')}
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>{t('Nouvel article')}</span>

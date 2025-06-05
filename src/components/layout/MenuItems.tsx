@@ -16,7 +16,11 @@ import {
   Printer,
   Wallet,
   Shield,
-  Cpu
+  Cpu,
+  Newspaper,
+  BarChart2,
+  List,
+  Archive
 } from 'lucide-react';
 import { IMenuItem } from './interfaces/MenuItem.interface';
 
@@ -24,9 +28,16 @@ const baseMenuItems = [
   {
     id: 1,
     code: 'dashboard',
-    title: 'Dashboard',
+    title: 'Tableau de bord',
     icon: <Home className="h-5 w-5" />,
-    subMenu: []
+    subMenu: [
+      {
+        code: 'articles_stats',
+        title: 'Statistiques Articles',
+        href: '/dashboard/articleDashboard',
+        icon: <BarChart2 className="h-5 w-5" />
+      }
+    ]
   },
   {
     id: 2,
@@ -36,13 +47,13 @@ const baseMenuItems = [
     subMenu: [
       {
         code: 'firms',
-        title: 'Firms',
+        title: 'Entreprises',
         href: '/contacts/firms',
         icon: <Building className="h-5 w-5" />
       },
       {
         code: 'interlocutors',
-        title: 'Interlocutors',
+        title: 'Interlocuteurs',
         href: '/contacts/interlocutors',
         icon: <BookUser className="h-5 w-5" />
       }
@@ -56,19 +67,19 @@ const baseMenuItems = [
     subMenu: [
       {
         code: 'quotations',
-        title: 'Quotations',
+        title: 'Devis',
         href: '/selling/quotations',
         icon: <File className="h-5 w-5" />
       },
       {
         code: 'invoices',
-        title: 'Invoices',
+        title: 'Factures',
         href: '/selling/invoices',
         icon: <FileText className="h-5 w-5" />
       },
       {
         code: 'payments',
-        title: 'Payments',
+        title: 'Paiements',
         href: '/selling/payments',
         icon: <Wallet className="h-5 w-5" />
       }
@@ -82,39 +93,52 @@ const baseMenuItems = [
     subMenu: [
       {
         code: 'quotations',
-        title: 'Quotations',
+        title: 'Devis fournisseurs',
         href: '/buying/expense_quotations',
         icon: <File className="h-5 w-5" />
       },
       {
         code: 'invoices',
-        title: 'Invoices',
+        title: 'Factures fournisseurs',
         href: '/buying/expense_invoices',
         icon: <FileText className="h-5 w-5" />
       },
       {
         code: 'payments',
-        title: 'Payments',
+        title: 'Paiements fournisseurs',
         href: '/buying/expense_payments',
         icon: <Wallet className="h-5 w-5" />
       },
+      // Section Articles avec codes simplifiés
+      {
+        code: 'articles', // Code simplifié
+        title: 'Articles',
+        href: '/article/article-Lists',
+        icon: <Newspaper className="h-5 w-5" />
+      },
+      {
+        code: 'archives', // Code simplifié (au lieu de articles_archives)
+        title: 'Archives',
+        href: '/article/article-archives',
+        icon: <Archive className="h-5 w-5" />
+      }
     ]
   },
   {
     id: 6,
     code: 'administrative_tools',
-    title: 'Administrative',
+    title: 'Administration',
     icon: <Shield className="h-5 w-5" />,
     subMenu: [
       {
         code: 'user_management',
-        title: 'Account',
+        title: 'Gestion Utilisateurs',
         href: '/administrative-tools/user-management/users',
         icon: <Users className="h-5 w-5" />
       },
       {
         code: 'logger',
-        title: 'Logger',
+        title: 'Journal d\'activité',
         href: '/administrative-tools/logger',
         icon: <Cpu className="h-5 w-5" />
       }
@@ -123,30 +147,30 @@ const baseMenuItems = [
   {
     id: 7,
     code: 'settings',
-    title: 'Settings',
+    title: 'Paramètres',
     icon: <Settings className="h-5 w-5" />,
     subMenu: [
       {
         code: 'account',
-        title: 'Account',
+        title: 'Mon Compte',
         href: '/settings/account/profile',
         icon: <UserCog className="h-5 w-5" />
       },
       {
         code: 'system',
-        title: 'System',
+        title: 'Système',
         href: '/settings/system/activity',
         icon: <FileCog className="h-5 w-5" />
       },
       {
         code: 'pdf',
-        title: 'PDF',
+        title: 'Gestion PDF',
         href: '/settings/pdf/live',
         icon: <Printer className="h-5 w-5" />
       },
       {
         code: 'other',
-        title: 'Other',
+        title: 'Autres Paramètres',
         href: '/settings/general',
         icon: <Wrench className="h-5 w-5" />
       }

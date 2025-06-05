@@ -264,9 +264,12 @@ const hardDelete = async (id: number): Promise<void> => {
 
 
 // Dans api.ts
+// Dans api.ts - Corriger la fonction remove
 const remove = async (id: number): Promise<{ success: boolean }> => {
   try {
+    // Changer l'URL pour correspondre à votre backend
     const response = await axios.delete<{ success: boolean }>(`/public/article/delete/${id}`);
+    
     if (response.data.success) {
       return { success: true };
     } else {
@@ -306,27 +309,22 @@ const generateQrCode = async (data: string): Promise<string> => {
     throw new Error("Impossible de générer le code QR.");
   }
 };
+
+
 const update = async (id: number, updateArticleDto: UpdateArticleDto): Promise<Article> => {
   try {
     const response = await axios.put<Article>(
-      `/public/article/update/${id}`,
+      `/public/article/${id}`,
       updateArticleDto,
       {
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        // Supprimez withCredentials ou mettez-le à false si vous n'utilisez pas de cookies
-        withCredentials: false
+        }
       }
     );
     return response.data;
   } catch (error) {
-    if (isAxiosError(error)) {
-      console.error('Update error details:', error.response?.data);
-      throw new Error(error.response?.data?.message || 'Échec de la mise à jour');
-    }
-    console.error('Update error:', error);
+   
     throw new Error('Une erreur inattendue est survenue');
   }
 };
@@ -872,20 +870,7 @@ const checkAvailability = async (
   }
 };
 
-const updateArticleStock = async (
-  id: number,
-  quantityChange: number
-): Promise<Article> => {
-  try {
-    const response = await axios.put<Article>(`/public/article/${id}/update-stock`, {
-      quantityChange
-    });
-    return response.data;
-  } catch (error) {
-    console.error("Erreur lors de la mise à jour du stock:", error);
-    throw new Error("Impossible de mettre à jour le stock de l'article.");
-  }
-};
+
 
 
 export const article = {
@@ -939,6 +924,5 @@ export const article = {
   hardDelete,
   extractFromPdf,
   findOneByReference,
-  checkAvailability,
-  updateArticleStock,
+  checkAvailability
 };
