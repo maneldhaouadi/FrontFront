@@ -170,6 +170,7 @@ const DialogflowTable = ({
   const [quotationDate, setQuotationDate] = useState<string>('');
   const [selectedCurrency, setSelectedCurrency] = useState<string>('EUR');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -209,6 +210,30 @@ const DialogflowTable = ({
   }
 }, [languageCode]);
 
+const ConfirmationModal = ({ 
+  onConfirm, 
+  onCancel,
+  message
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+  message: string;
+}) => (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-lg p-6 max-w-md w-full">
+      <h3 className="text-lg font-medium mb-4">{message}</h3>
+      <div className="flex justify-end gap-3">
+        <Button variant="outline" onClick={onCancel}>
+          {languageCode === 'fr' ? 'Annuler' : 'Cancel'}
+        </Button>
+        <Button variant="destructive" onClick={onConfirm}>
+          {languageCode === 'fr' ? 'Supprimer' : 'Delete'}
+        </Button>
+      </div>
+    </div>
+  </div>
+);
+
 // Fonctions d'aide
 const getWelcomeMessage = (lang: string) => {
   return lang === 'fr' 
@@ -216,6 +241,43 @@ const getWelcomeMessage = (lang: string) => {
     : lang === 'en' 
     ? 'Hello! How can I help you?'
     : '¡Hola! ¿Cómo puedo ayudarte?';
+};
+
+const translateStatus = (status: string, lang: string) => {
+  const statusMap: Record<string, Record<string, string>> = {
+    paid: {
+      fr: 'Payé',
+      en: 'Paid',
+      es: 'Pagado'
+    },
+    unpaid: {
+      fr: 'Non payé',
+      en: 'Unpaid',
+      es: 'No pagado'
+    },
+    draft: {
+      fr: 'Brouillon',
+      en: 'Draft',
+      es: 'Borrador'
+    },
+    cancelled: {
+      fr: 'Annulé',
+      en: 'Cancelled',
+      es: 'Cancelado'
+    },
+    expired: {
+      fr: 'Expiré',
+      en: 'Expired',
+      es: 'Expirado'
+    },
+    sent: {
+      fr: 'Envoyé',
+      en: 'Sent',
+      es: 'Enviado'
+    }
+  };
+
+  return statusMap[status.toLowerCase()]?.[lang] || status;
 };
 
 const translateMessage = (text: string, lang: string) => {
@@ -698,20 +760,7 @@ useEffect(() => {
         setIsTyping(true);
         const statuses = await fetchAvailableStatuses();
         
-        if (statuses.length > 0) {
-          const statusMessage: HistoryEntry = {
-            sender: 'bot',
-            text: languageCode === 'fr' 
-              ? 'Veuillez sélectionner un statut parmi la liste :' 
-              : 'Please select a status from the list:',
-            timestamp: new Date(),
-            isStatusSelection: true,
-            availableStatuses: statuses
-          };
-          
-          setMessages(prev => [...prev, statusMessage]);
-          storeSession(sessionId, [...messages, statusMessage]);
-        }
+       
       } catch (error) {
         console.error('Error loading statuses:', error);
       } finally {
@@ -954,7 +1003,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 
     try {
       setIsTyping(true);
-      const response = await api.dialogflow.sendRequest({
+     const response = await api.dialogflow.sendRequest({
   languageCode,
   queryText,
   sessionId,
@@ -1106,27 +1155,7 @@ const botMessage: HistoryEntry = {
       }
   }
  // Dans handleSubmit, avant l'envoi standard à Dialogflow
-if (queryText.toLowerCase().includes('statut') || queryText.toLowerCase().includes('status')) {
-  const statuses = await fetchAvailableStatuses();
-  
-  if (statuses.length > 0) {
-    const statusMessage: HistoryEntry = {
-      sender: 'bot',
-      text: languageCode === 'fr' 
-        ? 'Voici les statuts disponibles pour les devis :' 
-        : 'Here are the available quotation statuses:',
-      timestamp: new Date(),
-      isStatusSelection: true,
-      availableStatuses: statuses
-    };
 
-    const updatedMessages = [...messages, userMessage, statusMessage];
-    setMessages(updatedMessages);
-    storeSession(sessionId, updatedMessages);
-    setIsTyping(false);
-    return;
-  }
-}
 
   // Validation de la date d'échéance
   if (isInQuotationFlow() && getCurrentStep() === 'duedate') {
@@ -1836,7 +1865,7 @@ if (isInQuotationFlow() && getCurrentStep() === 'articleId') {
                   </div>
                 </div>
                 
-                {msg.details && (
+               {msg.details && (
   <Card className={`mt-2 ${msg.sender === 'user' ? 'ml-auto' : ''}`}>
     <CardHeader className="p-3 pb-0">
       <h4 className="font-medium text-sm">
@@ -1859,9 +1888,10 @@ if (isInQuotationFlow() && getCurrentStep() === 'articleId') {
           <span className={`ml-1 px-2 py-0.5 rounded-full text-xs ${
             msg.details.status.toLowerCase() === 'paid' ? 'bg-green-100 text-green-800' :
             msg.details.status.toLowerCase() === 'unpaid' ? 'bg-red-100 text-red-800' :
+            msg.details.status.toLowerCase() === 'expired' ? 'bg-yellow-100 text-yellow-800' :
             'bg-gray-100 text-gray-800'
           }`}>
-            {msg.details.status}
+            {translateStatus(msg.details.status, languageCode)}
           </span>
         </p>
       )}
@@ -2049,58 +2079,70 @@ if (isInQuotationFlow() && getCurrentStep() === 'articleId') {
                 </h3>
               </div>
               <div className="flex-1 overflow-y-auto p-3 pt-0 space-y-2">
-                {Object.entries(getStoredSessions())
-                  .sort(([, a], [, b]) => {
-                    const dateA = new Date(a.lastUpdated).getTime();
-                    const dateB = new Date(b.lastUpdated).getTime();
-                    return dateB - dateA;
-                  })
-                  .map(([id, sessionData]) => (
-                    <div 
-                      key={`${id}-${refreshKey}`}
-                      className={`group relative p-2 rounded-lg cursor-pointer text-sm ${
-                        id === sessionId 
-                          ? 'bg-blue-100 text-blue-800 font-medium' 
-                          : 'hover:bg-gray-100'
-                      }`}
-                    >
-                      <div 
-                        onClick={() => loadSession(id)}
-                        className="pr-6 truncate"
-                      >
-                        {id.startsWith('session-') 
-                          ? `${languageCode === 'fr' ? 'Session du' : 'Session from'} ${new Date(parseInt(id.split('-')[1])).toLocaleDateString()}`
-                          : id}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {new Date(sessionData.lastUpdated).toLocaleString()}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {sessionData.messages.length} {languageCode === 'fr' ? 'messages' : 'messages'}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm(languageCode === 'fr' 
-                            ? "Voulez-vous vraiment supprimer cette session ?" 
-                            : "Are you sure you want to delete this session?")) {
-                            deleteSession(id);
-                            if (id === sessionId) {
-                              const newSessionId = `session-${Date.now()}`;
-                              loadSession(newSessionId);
-                            }
-                          }
-                        }}
-                      >
-                        <XIcon className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
-              </div>
-            </div>
+  {Object.entries(getStoredSessions())
+    .sort(([, a], [, b]) => {
+      const dateA = new Date(a.lastUpdated).getTime();
+      const dateB = new Date(b.lastUpdated).getTime();
+      return dateB - dateA;
+    })
+    .map(([id, sessionData]) => (
+      <div 
+        key={`${id}-${refreshKey}`}
+        className={`group relative p-2 rounded-lg cursor-pointer text-sm ${
+          id === sessionId 
+            ? 'bg-blue-100 text-blue-800 font-medium' 
+            : 'hover:bg-gray-100'
+        }`}
+      >
+        <div 
+          onClick={() => loadSession(id)}
+          className="pr-6 truncate"
+        >
+          {id.startsWith('session-') 
+            ? `${languageCode === 'fr' ? 'Session du' : 'Session from'} ${new Date(parseInt(id.split('-')[1])).toLocaleDateString()}`
+            : id}
+        </div>
+        <div className="text-xs text-gray-500">
+          {new Date(sessionData.lastUpdated).toLocaleString()}
+        </div>
+        <div className="text-xs text-gray-500 mt-1">
+          {sessionData.messages.length} {languageCode === 'fr' ? 'messages' : 'messages'}
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSessionToDelete(id);
+          }}
+        >
+          <XIcon className="h-3 w-3" />
+        </Button>
+      </div>
+    ))}
+</div>
+
+{/* La modale de confirmation doit être placée en dehors de la div overflow-y-auto */}
+{sessionToDelete && (
+  <ConfirmationModal
+    message={
+      languageCode === 'fr'
+        ? "Voulez-vous vraiment supprimer cette session ?"
+        : "Are you sure you want to delete this session?"
+    }
+    onConfirm={() => {
+      deleteSession(sessionToDelete);
+      if (sessionToDelete === sessionId) {
+        const newSessionId = `session-${Date.now()}`;
+        loadSession(newSessionId);
+      }
+      setSessionToDelete(null);
+    }}
+    onCancel={() => setSessionToDelete(null)}
+  />
+)}
+</div>
 
             {/* Messages history */}
             <div className="flex-1 flex flex-col min-h-0">

@@ -14,7 +14,105 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2, Check, X } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
+import { useMediaQuery } from "@/hooks/other/useMediaQuery"
+import { Label } from "@/components/ui/label"
+
+interface TemplateDeleteDialogProps {
+  open: boolean
+  template: Template
+  onClose: () => void
+  onConfirm: () => void
+  isDeleting: boolean
+}
+
+const TemplateDeleteDialog: React.FC<TemplateDeleteDialogProps> = ({
+  open,
+  template,
+  onClose,
+  onConfirm,
+  isDeleting,
+}) => {
+  const isDesktop = useMediaQuery('(min-width: 768px)')
+
+  const header = (
+    <Label className="leading-5">
+      Voulez-vous vraiment supprimer le template <span className="font-semibold">"{template.name}"</span> ?
+    </Label>
+  )
+
+  const footer = (
+    <div className="flex gap-2 mt-2">
+      <Button
+        variant="default"
+        className="flex-1 gap-2 bg-black hover:bg-gray-800 text-white"
+        onClick={() => {
+          onConfirm()
+        }}
+        disabled={isDeleting}
+      >
+        <Check size={16} />
+        Supprimer
+        {isDeleting && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+      </Button>
+      <Button
+        variant="outline"
+        className="flex-1 gap-2"
+        onClick={onClose}
+        disabled={isDeleting}
+      >
+        <X size={16} />
+        Annuler
+      </Button>
+    </div>
+  )
+
+  if (isDesktop) {
+    return (
+      <Dialog open={open} onOpenChange={onClose}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmation de suppression</DialogTitle>
+            <DialogDescription className="pt-4">
+              {header}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>{footer}</DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
+  return (
+    <Drawer open={open} onOpenChange={onClose}>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>Confirmation de suppression</DrawerTitle>
+          <DrawerDescription className="pt-4">
+            {header}
+          </DrawerDescription>
+        </DrawerHeader>
+        <DrawerFooter className="pt-2">{footer}</DrawerFooter>
+      </DrawerContent>
+    </Drawer>
+  )
+}
 
 interface TemplateListProps {
   type: TemplateType
@@ -62,7 +160,8 @@ export function TemplateList({ type }: TemplateListProps) {
 const TemplateItem = ({ template, type }: { template: Template; type: TemplateType }) => {
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadFormat, setDownloadFormat] = useState<string | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   const handleDownload = async (format: 'pdf' | 'docx' | 'png' | 'jpeg') => {
     try {
@@ -71,7 +170,6 @@ const TemplateItem = ({ template, type }: { template: Template; type: TemplateTy
       
       const blob = await templateApi.exportTemplate(template.id, format)
       
-      // Create download link
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -79,7 +177,6 @@ const TemplateItem = ({ template, type }: { template: Template; type: TemplateTy
       document.body.appendChild(a)
       a.click()
       
-      // Cleanup
       setTimeout(() => {
         window.URL.revokeObjectURL(url)
         a.remove()
@@ -95,76 +192,69 @@ const TemplateItem = ({ template, type }: { template: Template; type: TemplateTy
       setDownloadFormat(null)
     }
   }
+
   const handleDelete = async () => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer ce template ?")) return;
-    
     try {
-      setIsDeleting(true);
-      await templateApi.remove(template.id);
-      toast.success("Template supprimé avec succès");
-      // Optionnel : Recharger la liste des templates après suppression
-      window.location.reload(); // Ou utiliser un state global (ex: React Query)
+      setIsDeleting(true)
+      await templateApi.remove(template.id)
+      toast.success("Template supprimé avec succès")
+      window.location.reload()
     } catch (error) {
       toast.error("Échec de la suppression", {
         description: error instanceof Error ? error.message : "Erreur inconnue",
-      });
+      })
     } finally {
-      setIsDeleting(false);
+      setIsDeleting(false)
     }
-  };
+  }
 
   return (
-    <Card className="p-4 flex justify-between items-center">
-      <div>
-        <h3 className="font-medium">{template.name}</h3>
-        <p className="text-sm text-muted-foreground">
-          {template.isDefault && (
-            <span className="inline-flex items-center mr-2">
-              ⭐ Par défaut
-            </span>
-          )}
-        </p>
-      </div>
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" asChild>
-          <Link href={`/settings/pdf/template/${template.id}`}>
-            Éditer
-          </Link>
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleDelete}
-          disabled={isDeleting}
-          className="text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
-        >
-          {isDeleting ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin text-red-600" />
-          ) : (
-            <span className="flex items-center gap-1">
-              <Trash2 className="w-4 h-4" />
-              Supprimer
-            </span>
-          )}
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => handleDownload('pdf')}>
-              PDF
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDownload('docx')}>
-              Word (DOCX)
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDownload('png')}>
-              Image (PNG)
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDownload('jpeg')}>
-              Image (JPEG)
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </Card>
+    <>
+      <Card className="p-4 flex justify-between items-center">
+        <div>
+          <h3 className="font-medium">{template.name}</h3>
+          <p className="text-sm text-muted-foreground">
+            {template.isDefault && (
+              <span className="inline-flex items-center mr-2">
+                ⭐ Par défaut
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/settings/pdf/template/${template.id}`}>
+              Éditer
+            </Link>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowDeleteDialog(true)}
+            disabled={isDeleting}
+            className="text-black hover:bg-gray-100 transition-colors"
+          >
+            {isDeleting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin text-black" />
+            ) : (
+              <span className="flex items-center gap-1">
+                <Trash2 className="w-4 h-4" />
+                Supprimer
+              </span>
+            )}
+          </Button>
+          
+        </div>
+      </Card>
+
+      <TemplateDeleteDialog
+        open={showDeleteDialog}
+        template={template}
+        onClose={() => setShowDeleteDialog(false)}
+        onConfirm={handleDelete}
+        isDeleting={isDeleting}
+      />
+    </>
   )
 }
 

@@ -111,7 +111,7 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
     });
 
     if (isDuplicate) {
-      toast.error(tInvoicing('quotation.errors.article_already_exists'));
+toast.error("Cet article existe déjà dans la liste");
       return;
     }
   }
@@ -161,8 +161,8 @@ const handleReferenceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     return;
   }
 
-  // Only check for duplicates when creating a new article (not selecting existing one)
-  if (!useExistingArticle && !isExistingArticleSelected) {
+  // Only check for duplicates when creating a new article (id === 0)
+  if (article.article?.id === 0) {
     const isDuplicate = existingEntries.some(entry => {
       // Skip current article in the check
       if (entry.id === article.id) return false;
@@ -172,8 +172,8 @@ const handleReferenceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     });
 
     if (isDuplicate) {
-      setReferenceError(tInvoicing('quotation.errors.reference_already_exists'));
-      return; // Ne pas mettre à jour la référence si doublon
+toast.error("Cet article existe déjà dans la liste");
+      return;
     }
   }
 
@@ -194,24 +194,19 @@ const handleReferenceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 };
 useEffect(() => {
   // Only check for duplicates when:
-  // - Not using existing article
-  // - Not an existing article selected
+  // - It's a new article (id === 0)
   // - Reference is not empty
-  if (!useExistingArticle && 
-      !isExistingArticleSelected && 
-      article.reference && 
-      article.reference.length >= 4) { // Minimum "REF-"
-        
+  if (article.article?.id === 0 && article.reference && article.reference.length >= 4) {
     const isDuplicate = existingEntries.some(entry => {
-      if (entry.id === article.id) return false; // Skip current article
+      if (entry.id === article.id) return false;
       
       const entryRef = entry.article?.reference || (entry as any)?.reference;
       return entryRef?.toUpperCase() === article.reference?.toUpperCase();
     });
 
-    setReferenceError(isDuplicate ? tInvoicing('quotation.errors.reference_already_exists') : null);
+    setReferenceError(isDuplicate ? tInvoicing('Cette référence est déjà utilisée') : null);
   }
-}, [article.reference, existingEntries, useExistingArticle, isExistingArticleSelected, tInvoicing]);// Ajoutez cette fonction helper pour créer un nouvel article
+}, [article.reference, existingEntries, tInvoicing, article.article?.id]);
 const createNewArticle = (): Article => ({
   id: 0,
   title: '',
@@ -237,12 +232,13 @@ useEffect(() => {
     });
 
     if (isDuplicate) {
-      setReferenceError(tInvoicing('quotation.errors.reference_already_exists'));
+      setReferenceError(tInvoicing('Cette référence est déjà utilisée'));
     } else {
       setReferenceError(null);
     }
   }
-}, [article.reference, existingEntries, useExistingArticle, isExistingArticleSelected, tInvoicing]);const handleSelectArticle = async (value: string) => {
+}, [article.reference, existingEntries, useExistingArticle, isExistingArticleSelected, tInvoicing]);
+const handleSelectArticle = async (value: string) => {
   console.log('Selected article ID:', value);
   if (!value) return;
 
@@ -251,20 +247,7 @@ useEffect(() => {
     console.log('Found article:', selectedArticle);
 
     if (!selectedArticle) {
-      toast.error(tInvoicing('quotation.errors.article_not_found'));
-      return;
-    }
-
-    // Vérifier si la référence est déjà dans la liste
-    const isReferenceDuplicate = existingEntries.some(entry => {
-      const entryRef = entry.article?.reference || (entry as any)?.reference;
-      return entryRef?.toUpperCase() === selectedArticle.reference?.toUpperCase() &&
-             entry.id !== article.id;
-    });
-
-    if (isReferenceDuplicate) {
-      setReferenceError(tInvoicing('quotation.errors.reference_already_exists'));
-      toast.error(tInvoicing('quotation.errors.reference_already_exists'));
+      toast.error(tInvoicing('Article non trouvé'));
       return;
     }
 
@@ -275,15 +258,14 @@ useEffect(() => {
     });
 
     if (isAlreadyAdded) {
-      toast.error(tInvoicing('quotation.errors.article_already_added'));
+      toast.error(tInvoicing('Cet article a déjà été ajouté'));
       return;
     }
 
     // Vérifier la disponibilité
     if (selectedArticle.quantityInStock <= 0) {
-      setQuantityError(tInvoicing('quotation.errors.quantity_unavailable'));
-      toast.error(tInvoicing('quotation.errors.quantity_unavailable'));
-      return;
+      setQuantityError("Stock insuffisant");
+toast.error("Stock insuffisant"); return;
     }
 
     // Mettre à jour l'article sélectionné
@@ -300,10 +282,10 @@ useEffect(() => {
 
     setIsExistingArticleSelected(true);
     setQuantityError(null);
-    setReferenceError(null);
+    setReferenceError(null); // Reset reference error when selecting existing article
   } catch (error) {
     console.error('Error selecting article:', error);
-    toast.error(tInvoicing('quotation.errors.article_selection_failed'));
+toast.error("Échec de la sélection de l'article");
   }
 };
   const handleUseExistingArticleChange = (checked: boolean) => {
@@ -377,7 +359,7 @@ const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       
       if (isExistingArticleSelected && article.originalStock !== undefined) {
         if (newQuantity > article.originalStock) {
-          setQuantityError(tInvoicing('quotation.errors.quantity_exceeds', { 
+          setQuantityError(tInvoicing('cette quantité dépasse la quantité disponible.', { 
             available: article.originalStock 
           }));
           return;
@@ -504,7 +486,7 @@ const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
 
   const handleAddTax = () => {
     if ((article.articleExpensQuotationEntryTaxes?.length || 0) >= taxes.length) {
-      toast.warning(tInvoicing('quotation.errors.surpassed_tax_limit'));
+toast.warning("Nombre maximum de taxes atteint");
       return;
     }
     onChange({

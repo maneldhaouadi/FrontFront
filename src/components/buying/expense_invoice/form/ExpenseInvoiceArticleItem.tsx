@@ -61,25 +61,27 @@ export const ExpenseInvoiceArticleItem: React.FC<ExpenseInvoiceArticleItemProps>
   const currencySymbol = currency?.symbol || '$';
   const [availableQuantity, setAvailableQuantity] = useState<number | null>(null);
 
-  useEffect(() => {
-    const fetchArticles = async () => {
-      setLoading(true);
-      try {
-        const response = await api.article.findPaginated(1, 100, 'ASC', 'title');
-        setArticles(response.data);
-      } catch (error) {
-        toast.error(tInvoicing('error.loading_articles'));
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (useExistingArticle) {
-      fetchArticles();
+ useEffect(() => {
+  const fetchArticles = async () => {
+    setLoading(true);
+    try {
+      const articles = await api.article.findPaginated(1, 100, 'ASC', 'title');
+      setArticles(articles || []);
+    } catch (error) {
+      console.error("Fetch articles error:", error);
+      toast.error(tInvoicing('error.loading_articles'));
+      setArticles([]);
+    } finally {
+      setLoading(false);
     }
-  }, [useExistingArticle, tInvoicing]);
+  };
 
-  const handleReferenceChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  if (useExistingArticle) {
+    fetchArticles();
+  } else {
+    setArticles([]);
+  }
+}, [useExistingArticle, tInvoicing]);  const handleReferenceChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;
     
     // Si l'utilisateur essaie de supprimer le préfixe REF-, on le remet
@@ -205,26 +207,36 @@ export const ExpenseInvoiceArticleItem: React.FC<ExpenseInvoiceArticleItemProps>
   };
 
   const handleSelectArticle = async (value: string) => {
-    if (value === 'disabled') return;
-    
+  if (value === 'disabled' || value === 'loading' || value === 'no-articles') return;
+  
+  try {
     const selectedArticle = articles.find((art) => art.id === parseInt(value));
-    if (selectedArticle) {
-      setAvailableQuantity(selectedArticle.quantityInStock);
-      setIsExistingArticle(true);
-      
-      const unitPrice = Math.round(Number(selectedArticle.unitPrice)) || 0;
-      
-      onChange({
-        ...article,
-        article: {
-          ...selectedArticle,
-          unitPrice: unitPrice
-        },
-        quantity: Math.min(article.quantity || 1, selectedArticle.quantityInStock || 1),
-        unit_price: unitPrice
-      });
+    if (!selectedArticle) {
+      toast.error(tInvoicing('article.errors.not_found'));
+      return;
     }
-  };
+
+    setAvailableQuantity(selectedArticle.quantityInStock);
+    setIsExistingArticle(true);
+    
+    const unitPrice = selectedArticle.unitPrice || 0;
+    
+    onChange({
+      ...article,
+      article: {
+        ...selectedArticle,
+        unitPrice: unitPrice
+      },
+      quantity: Math.min(article.quantity || 1, selectedArticle.quantityInStock || 1),
+      unit_price: unitPrice,
+      reference: selectedArticle.reference || ''
+    });
+  } catch (error) {
+    console.error("Error selecting article:", error);
+    toast.error(tInvoicing('article.errors.selection_failed'));
+  }
+};
+
 
   const handleUseExistingArticleChange = (checked: boolean) => {
     setUseExistingArticle(checked);
@@ -419,55 +431,55 @@ export const ExpenseInvoiceArticleItem: React.FC<ExpenseInvoiceArticleItemProps>
                   </Label>
                 </div>
                 {useExistingArticle ? (
-                  <Select onValueChange={handleSelectArticle}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={tInvoicing('Select an article')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <div className="p-2">
-                        <Input
-                          placeholder={tInvoicing('Search an article...')}
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                      </div>
-                      {loading ? (
-                        <SelectItem value="loading" disabled>
-                          {tInvoicing('Loading...')}
-                        </SelectItem>
-                      ) : articles.length > 0 ? (
-                        articles
-                          .filter(article => 
-                            article?.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            (article.reference && article.reference.toLowerCase().includes(searchQuery.toLowerCase()))
-                          )
-                          .map((art) => (
-                            <SelectItem 
-                              key={art.id} 
-                              value={art.id.toString()}
-                              disabled={art.quantityInStock <= 0}
-                              className={art.quantityInStock <= 0 ? 'opacity-50 cursor-not-allowed' : ''}
-                            >
-                              <div className="flex justify-between items-center">
-                                <span>
-                                  {art.title} {art.reference ? `(${art.reference})` : ''}
-                                </span>
-                                <span className="text-xs text-muted-foreground ml-2">
-                                  {art.quantityInStock <= 0 ? 
-                                    tInvoicing('out_of_stock') : 
-                                    `${art.quantityInStock} ${tInvoicing('available')}`
-                                  }
-                                </span>
-                              </div>
-                            </SelectItem>
-                          ))
-                      ) : (
-                        <SelectItem value="no-articles" disabled>
-                          {tInvoicing('No articles available')}
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
+                  <Select onValueChange={handleSelectArticle} value={article.article?.id?.toString() || ''}>
+  <SelectTrigger>
+    <SelectValue placeholder={tInvoicing('Select an article')} />
+  </SelectTrigger>
+  <SelectContent>
+    <div className="p-2">
+      <Input
+        placeholder={tInvoicing('Search an article...')}
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+      />
+    </div>
+    {loading ? (
+      <SelectItem value="loading" disabled>
+        {tInvoicing('Loading...')}
+      </SelectItem>
+    ) : articles.length > 0 ? (
+      articles
+        .filter(art => 
+          art.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          art.reference?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+        .map((art) => (
+          <SelectItem 
+            key={art.id} 
+            value={art.id.toString()}
+            disabled={art.quantityInStock <= 0}
+            className={art.quantityInStock <= 0 ? 'opacity-50 cursor-not-allowed' : ''}
+          >
+            <div className="flex justify-between items-center">
+              <span>
+                {art.title} {art.reference ? `(${art.reference})` : ''}
+              </span>
+              <span className="text-xs text-muted-foreground ml-2">
+                {art.quantityInStock <= 0 ? 
+                  tInvoicing('out_of_stock') : 
+                  `${art.quantityInStock} ${tInvoicing('available')}`
+                }
+              </span>
+            </div>
+          </SelectItem>
+        ))
+    ) : (
+      <SelectItem value="no-articles" disabled>
+        {tInvoicing('No articles available')}
+      </SelectItem>
+    )}
+  </SelectContent>
+</Select>
                 ) : (
                   <>
                     <Input
