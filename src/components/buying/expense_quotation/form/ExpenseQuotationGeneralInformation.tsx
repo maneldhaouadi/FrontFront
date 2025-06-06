@@ -46,10 +46,20 @@ export const ExpenseQuotationGeneralInformation = ({
   );
 
   const [isValidating, setIsValidating] = useState(false);
+  const [hasTouchedSequentialNumber, setHasTouchedSequentialNumber] = useState(false);
 
   const validationTimeout = useRef<NodeJS.Timeout>();
 
   const validateSequentialNumber = useCallback(async (value: string) => {
+    // Validation requise
+    if (!value) {
+      quotationManager.setError(
+        'sequentialNumbr', 
+        tInvoicing('Le numéro séquentiel est requis')
+      );
+      return false;
+    }
+
     const sequentialNumberRegex = /^QUO-\d{1,6}$/;
     
     // Validation du format
@@ -69,7 +79,7 @@ export const ExpenseQuotationGeneralInformation = ({
       if (exists) {
         quotationManager.setError(
           'sequentialNumbr', 
-          tInvoicing('ce numero sequentiel existe deja')
+          tInvoicing('quotation.sequential_number_already_exists')
         );
         return false;
       }
@@ -91,6 +101,7 @@ export const ExpenseQuotationGeneralInformation = ({
 
   const handleSequentialNumberChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
+    setHasTouchedSequentialNumber(true);
     quotationManager.set('sequentialNumbr', value);
     quotationManager.setError('sequentialNumbr', null);
   
@@ -98,18 +109,16 @@ export const ExpenseQuotationGeneralInformation = ({
       clearTimeout(validationTimeout.current);
     }
   
-    if (value.length >= 4) { // "QUO-1" = 4 caractères minimum
-      validationTimeout.current = setTimeout(() => {
-        validateSequentialNumber(value);
-      }, 500); // Délai de 500ms après le dernier changement
-    }
+    validationTimeout.current = setTimeout(() => {
+      validateSequentialNumber(value);
+    }, 500); // Délai de 500ms après le dernier changement
   }, [quotationManager, validateSequentialNumber]);
 
   const SequentialNumberError = () => {
-    if (!quotationManager.sequentialNumbr) {
+    if (!quotationManager.sequentialNumbr && hasTouchedSequentialNumber) {
       return (
         <p className="text-xs text-red-500 mt-1">
-          {tInvoicing('quotation.sequential_number_required')}
+          {tInvoicing('Le numéro séquentiel est requis')}
         </p>
       );
     }
@@ -124,6 +133,7 @@ export const ExpenseQuotationGeneralInformation = ({
   
     return null;
   };
+
 
   const handlePdfFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (isInspectMode) return;
@@ -343,44 +353,50 @@ export const ExpenseQuotationGeneralInformation = ({
           )}
         </div>
         <div className="w-1/3">
-      <Label className="text-xs font-semibold mb-1">
-        {tInvoicing('quotation.singular')} N° *
-      </Label>
-      {edit && !isInspectMode ? (
-        <div className="relative">
-          <div className="flex items-center">
-            <span className="inline-flex items-center h-8 px-3 text-sm border border-r-0 rounded-l-md bg-gray-50 text-gray-500 border-gray-300">
-              QUO-
-            </span>
-            <Input
-              className={cn(
-                "w-full h-8 rounded-l-none",
-                quotationManager.errors?.sequentialNumbr && 
-                "border-red-500 focus-visible:ring-red-500"
-              )}
-              placeholder="123456"
-              value={quotationManager.sequentialNumbr?.replace('QUO-', '') || ''}
-              onChange={(e) => {
-                // N'autoriser que les chiffres et limiter à 6 caractères
-                const numericValue = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
-                handleSequentialNumberChange({
-                  target: { value: `QUO-${numericValue}` }
-                } as React.ChangeEvent<HTMLInputElement>);
-              }}
-              maxLength={6} // Limite physique à 6 caractères
-              isPending={isValidating || loading}
-            />
-          </div>
-          {quotationManager.errors?.sequentialNumbr && (
-            <p className="text-xs text-red-500 mt-1 animate-fade-in">
-              {quotationManager.errors.sequentialNumbr}
-            </p>
+          <Label className="text-xs font-semibold mb-1">
+            {tInvoicing('quotation.singular')} N° *
+          </Label>
+          {edit && !isInspectMode ? (
+            <div className="relative">
+              <div className="flex items-center">
+                <span className="inline-flex items-center h-8 px-3 text-sm border border-r-0 rounded-l-md bg-gray-50 text-gray-500 border-gray-300">
+                  QUO-
+                </span>
+                <Input
+                  className={cn(
+                    "w-full h-8 rounded-l-none",
+                    (quotationManager.errors?.sequentialNumbr || 
+                     (hasTouchedSequentialNumber && !quotationManager.sequentialNumbr)) && 
+                    "border-red-500 focus-visible:ring-red-500"
+                  )}
+                  placeholder="123456"
+                  value={quotationManager.sequentialNumbr?.replace('QUO-', '') || ''}
+                  onChange={(e) => {
+                    // N'autoriser que les chiffres et limiter à 6 caractères
+                    const numericValue = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
+                    handleSequentialNumberChange({
+                      target: { value: `QUO-${numericValue}` }
+                    } as React.ChangeEvent<HTMLInputElement>);
+                  }}
+                  onBlur={() => {
+                    if (!quotationManager.sequentialNumbr) {
+                      setHasTouchedSequentialNumber(true);
+                      quotationManager.setError(
+                        'sequentialNumbr', 
+                        tInvoicing('Le numéro séquentiel est requis')
+                      );
+                    }
+                  }}
+                  maxLength={6} // Limite physique à 6 caractères
+                  isPending={isValidating || loading}
+                />
+              </div>
+              <SequentialNumberError />
+            </div>
+          ) : (
+            <UneditableInput value={quotationManager.sequentialNumbr || ''} />
           )}
         </div>
-      ) : (
-        <UneditableInput value={quotationManager.sequentialNumbr || ''} />
-      )}
-    </div>
       </div>
 
       <div className="flex gap-1">

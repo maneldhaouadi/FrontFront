@@ -240,31 +240,34 @@ export const ExpenseInvoiceUpdateForm = ({ className, invoiceId }: ExpenseInvoic
   const onSubmit = async (status: EXPENSE_INVOICE_STATUS) => {
     try {
       // 1. Conversion des articles en DTO avec typage strict
-      const articlesDto: ExpenseCreateArticleInvoiceEntry[] = (articleManager.getArticles() || []).map((articleEntry) => {
-        if (!articleEntry.article) {
-          throw new Error(`Article is missing for entry ${articleEntry.id}`);
-        }
-  
-        return {
-          id: articleEntry.id,
-          articleId: articleEntry.article.id,
-          quantity: articleEntry.quantity || 0,
-          unit_price: articleEntry.unit_price || 0,
-          discount: articleEntry.discount || 0,
-          discount_type: articleEntry.discount_type || DISCOUNT_TYPE.AMOUNT,
-          taxes: (articleEntry.expenseArticleInvoiceEntryTaxes || [])
-            .map(entry => entry?.tax?.id)
-            .filter((id): id is number => id !== undefined),
-          reference: articleEntry.reference || '',
-          article: {
-            ...articleEntry.article,
-            version: (articleEntry.article.version || 0) + 1,
-            title: articleEntry.article.title || '',
-            description: articleEntry.article.description || '',
-            unitPrice: articleEntry.unit_price || 0
-          }
-        };
-      });
+     const articlesDto: ExpenseCreateArticleInvoiceEntry[] = (articleManager.getArticles() || []).map((articleEntry) => {
+  if (!articleEntry.article) {
+    throw new Error(`Article is missing for entry ${articleEntry.id}`);
+  }
+
+  return {
+    id: articleEntry.id,
+    articleId: articleEntry.article.id,
+    quantity: articleEntry.quantity || 0,
+    unit_price: articleEntry.unit_price || 0,
+    discount: articleEntry.discount || 0,
+    discount_type: articleEntry.discount_type || DISCOUNT_TYPE.AMOUNT,
+    taxes: (articleEntry.expenseArticleInvoiceEntryTaxes || [])
+      .map(entry => entry?.tax?.id)
+      .filter((id): id is number => id !== undefined),
+    reference: articleEntry.reference || '',
+    article: {
+      id: articleEntry.article.id,
+      title: articleEntry.article.title || '',
+      description: articleEntry.article.description || '',
+      reference: articleEntry.article.reference || '',
+      unitPrice: articleEntry.unit_price || articleEntry.article.unitPrice || 0,
+      version: (articleEntry.article.version || 0) + 1,
+      status: articleEntry.article.status || 'draft',
+      quantityInStock: articleEntry.article.quantityInStock || 0
+    }
+  };
+});
   
       // 2. Gestion des fichiers PDF
       let pdfFileId = invoiceManager.pdfFileId;

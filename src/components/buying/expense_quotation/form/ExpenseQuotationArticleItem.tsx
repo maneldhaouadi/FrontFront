@@ -204,7 +204,6 @@ useEffect(() => {
       return entryRef?.toUpperCase() === article.reference?.toUpperCase();
     });
 
-    setReferenceError(isDuplicate ? tInvoicing('Cette référence est déjà utilisée') : null);
   }
 }, [article.reference, existingEntries, tInvoicing, article.article?.id]);
 const createNewArticle = (): Article => ({
@@ -232,7 +231,6 @@ useEffect(() => {
     });
 
     if (isDuplicate) {
-      setReferenceError(tInvoicing('Cette référence est déjà utilisée'));
     } else {
       setReferenceError(null);
     }

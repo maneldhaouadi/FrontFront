@@ -99,7 +99,7 @@ export const Sidebar = ({ menuItems }: SidebarProps) => {
                         )}
                       >
                         <span className="text-lg">{subItem.icon}</span>
-                        <span className="font-medium">{t(`submenu.${subItem.code}`)}</span>
+                        <span className="font-medium">{t(`${subItem.code}`)}</span>
                       </Link>
                     ))}
                   </AccordionContent>
