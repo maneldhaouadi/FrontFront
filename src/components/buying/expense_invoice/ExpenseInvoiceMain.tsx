@@ -187,13 +187,15 @@ const { mutate: duplicateInvoice, isPending: isDuplicationPending } = useMutatio
   onSuccess: async (data) => {
     invoiceManager.reset();
     invoiceManager.set(data);
-    toast.success(tInvoicing('expense_invoice.action_duplicate_success'));
+    toast.success(tInvoicing('facture dupliquée avec succés'));
     await router.push('/buying/expense_invoice/' + data.id);
     setDuplicateDialog(false);
   },
   onError: (error) => {
     toast.error(
-      getErrorMessage('invoicing', error, tInvoicing('expense_invoice.action_duplicate_failure'))
+      getErrorMessage
+      
+      ('invoicing', error, tInvoicing('expense_invoice.action_duplicate_failure'))
     );
   },
 });

@@ -142,6 +142,11 @@ export interface ArticleCompareResponseDto {
   error?: string;
 }
 
+export interface DeleteArticleResponse {
+  success: boolean;
+  message?: string;
+  deletedArticle?: ResponseArticleDto;
+}
 // Interfaces pour l'OCR et extraction PDF
 export interface OcrProcessingResult {
   text: string;

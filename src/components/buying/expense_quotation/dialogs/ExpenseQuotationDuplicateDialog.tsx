@@ -57,7 +57,7 @@ export const ExpenseQuotationDuplicateDialog: React.FC<ExpenseQuotationDuplicate
 
   const header = (
     <Label className="leading-5">
-      {tInvoicing('quotation.confirm_duplicate')}
+      {tInvoicing('Voulez-vous vraiment dupliquer ce devis?')}
     </Label>
   );
 

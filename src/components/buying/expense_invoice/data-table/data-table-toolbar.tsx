@@ -23,7 +23,7 @@ export function DataTableToolbar<TData>({ table }: DataTableToolbarProps<TData>)
       <div className="flex flex-1 items-center space-x-2">
         <Input
           placeholder={tCommon('table.filter_placeholder', {
-            entity: tInvoicing('expense_invoice.plural')
+            entity: tInvoicing('Factures')
           })}
           value={searchTerm?.toString()}
           onChange={(event) => {

@@ -18,6 +18,8 @@ import { UneditableInput } from '@/components/ui/uneditable/uneditable-input';
 import { api } from '@/api';
 import { Checkbox } from '@/components/ui/checkbox';
 import { QuotationTaxEntries } from './ExpenseQuotationTaxEntries';
+import { Button } from '@/components/ui/button';
+
 
 interface ExpenseQuotationArticleItemProps {
   className?: string;
@@ -50,167 +52,91 @@ export const ExpenseQuotationArticleItem: React.FC<ExpenseQuotationArticleItemPr
   const [searchQuery, setSearchQuery] = useState('');
   const [quantityError, setQuantityError] = useState<string | null>(null);
   const [isExistingArticleSelected, setIsExistingArticleSelected] = useState<boolean>(false);
-  const [referenceError, setReferenceError] = useState<string | null>(null);
+
 
   const digitAfterComma = currency?.digitAfterComma || 3;
   const currencySymbol = currency?.symbol || '$';
 
- useEffect(() => {
-  const fetchArticles = async () => {
-    setLoading(true);
-    setFormError(null);
-    try {
-      const response = await api.article.findPaginated(1, 100, 'ASC', 'title');
-      console.log('Fetched articles:', response);
-      
-      // Handle different response formats
-      let articlesData: Article[] = [];
-      if (Array.isArray(response)) {
-        articlesData = response;
-      } else if (response && 'data' in response && Array.isArray(response.data)) {
-        articlesData = response.data;
-      } else if (response && 'data' in response && Array.isArray((response as PagedArticle).data)) {
-        articlesData = (response as PagedArticle).data;
-      } else {
-        console.error('Unexpected response format:', response);
-        setFormError('Invalid articles data format');
+  useEffect(() => {
+    const fetchArticles = async () => {
+      setLoading(true);
+      setFormError(null);
+      try {
+        const response = await api.article.findPaginated(1, 100, 'ASC', 'title');
+        
+        let articlesData: Article[] = [];
+        if (Array.isArray(response)) {
+          articlesData = response;
+        } else if (response && 'data' in response && Array.isArray(response.data)) {
+          articlesData = response.data;
+        } else if (response && 'data' in response && Array.isArray((response as PagedArticle).data)) {
+          articlesData = (response as PagedArticle).data;
+        } else {
+          console.error('Unexpected response format:', response);
+          setFormError('Invalid articles data format');
+        }
+        
+        const availableArticles = articlesData.filter(article => 
+          article.status !== 'out_of_stock' && article.quantityInStock > 0
+        );
+        
+        setArticles(availableArticles);
+      } catch (error) {
+        setFormError('Failed to fetch articles. Please try again later.');
+        console.error('Error fetching articles:', error);
+        toast.error('Error fetching articles');
+      } finally {
+        setLoading(false);
       }
-      
-      // Filtrer les articles en rupture de stock
-      const availableArticles = articlesData.filter(article => 
-        article.status !== 'out_of_stock' && article.quantityInStock > 0
-      );
-      
-      setArticles(availableArticles);
-    } catch (error) {
-      setFormError('Failed to fetch articles. Please try again later.');
-      console.error('Error fetching articles:', error);
-      toast.error('Error fetching articles');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  if (useExistingArticle) {
-    fetchArticles();
-  }
-}, [useExistingArticle]);
+    if (useExistingArticle) {
+      fetchArticles();
+    }
+  }, [useExistingArticle]);
+
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  const newTitle = e.target.value.trim();
-  
-  if (!newTitle) {
-    toast.error(tInvoicing('quotation.errors.title_required'));
-    return;
-  }
-  
-  // Only check for duplicates when creating a new article
-  if (!isExistingArticleSelected) {
-    const isDuplicate = existingEntries.some(entry => {
-      const entryTitle = entry.article?.title ?? (entry as any)?.title;
-      return entryTitle?.toLowerCase() === newTitle.toLowerCase();
-    });
-
-    if (isDuplicate) {
-toast.error("Cet article existe déjà dans la liste");
+    const newTitle = e.target.value.trim();
+    
+    if (!newTitle) {
+      toast.error(tInvoicing('quotation.errors.title_required'));
       return;
     }
-  }
+    
+    if (!isExistingArticleSelected) {
+      const isDuplicate = existingEntries.some(entry => {
+        const entryTitle = entry.article?.title ?? (entry as any)?.title;
+        return entryTitle?.toLowerCase() === newTitle.toLowerCase();
+      });
 
-  const updatedArticle = {
-    ...(article.article || {
-      id: 0,
-      title: '',
-      description: '',
-      reference: '',
-      quantityInStock: article.quantity || 1,
-      status: 'draft',
-      version: 0,
-      unitPrice: article.unit_price || 0,
-      notes: '',
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }),
-    title: newTitle,
-    quantityInStock: article.quantity || 1,
-    unitPrice: article.unit_price || 0
-  };
-
-  onChange({
-    ...article,
-    article: updatedArticle,
-    quantity: article.quantity || 1,
-    orderedQuantity: article.orderedQuantity || 0,
-    originalStock: article.originalStock || 0,
-    unit_price: article.unit_price || 0
-  });
-};
-
-
-
-const handleReferenceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  let newReference = e.target.value.toUpperCase();
-  
-  // Force REF- prefix
-  if (!newReference.startsWith('REF-')) {
-    newReference = 'REF-' + newReference.replace(/^REF-?/i, '');
-  }
-
-  // Validate numeric part
-  const numericPart = newReference.substring(4);
-  if (numericPart && !/^\d*$/.test(numericPart)) {
-    return;
-  }
-
-  // Only check for duplicates when creating a new article (id === 0)
-  if (article.article?.id === 0) {
-    const isDuplicate = existingEntries.some(entry => {
-      // Skip current article in the check
-      if (entry.id === article.id) return false;
-      
-      const entryRef = entry.article?.reference || (entry as any)?.reference;
-      return entryRef?.toUpperCase() === newReference;
-    });
-
-    if (isDuplicate) {
-toast.error("Cet article existe déjà dans la liste");
-      return;
+      if (isDuplicate) {
+        toast.error("Cet article existe déjà dans la liste");
+        return;
+      }
     }
-  }
 
-  // Si pas de doublon ou article existant, effacer l'erreur et mettre à jour
-  setReferenceError(null);
-
-  const updatedArticle = {
-    ...article,
-    article: {
+    const updatedArticle = {
       ...(article.article || createNewArticle()),
-      reference: newReference,
-      updatedAt: new Date()
-    },
-    reference: newReference
+      title: newTitle,
+      quantityInStock: article.quantity || 1,
+      unitPrice: article.unit_price || 0
+    };
+
+    onChange({
+      ...article,
+      article: updatedArticle,
+      quantity: article.quantity || 1,
+      orderedQuantity: article.orderedQuantity || 0,
+      originalStock: article.originalStock || 0,
+      unit_price: article.unit_price || 0
+    });
   };
 
-  onChange(updatedArticle);
-};
-useEffect(() => {
-  // Only check for duplicates when:
-  // - It's a new article (id === 0)
-  // - Reference is not empty
-  if (article.article?.id === 0 && article.reference && article.reference.length >= 4) {
-    const isDuplicate = existingEntries.some(entry => {
-      if (entry.id === article.id) return false;
-      
-      const entryRef = entry.article?.reference || (entry as any)?.reference;
-      return entryRef?.toUpperCase() === article.reference?.toUpperCase();
-    });
-
-  }
-}, [article.reference, existingEntries, tInvoicing, article.article?.id]);
-const createNewArticle = (): Article => ({
+  const createNewArticle = (): Article => ({
   id: 0,
   title: '',
   description: '',
-  reference: '',
+  reference: generateRandomReference(), // Ajout de la référence générée
   quantityInStock: 1,
   status: 'draft',
   version: 0,
@@ -221,22 +147,7 @@ const createNewArticle = (): Article => ({
   isDeletionRestricted: false
 });
 
-useEffect(() => {
-  // Check for duplicate reference when component mounts or article changes
-  if (article.reference && !useExistingArticle && !isExistingArticleSelected) {
-    const isDuplicate = existingEntries.some(entry => {
-      const entryRef = entry.article?.reference || (entry as any)?.reference;
-      return entryRef?.toUpperCase() === article.reference?.toUpperCase() && 
-             entry.id !== article.id;
-    });
-
-    if (isDuplicate) {
-    } else {
-      setReferenceError(null);
-    }
-  }
-}, [article.reference, existingEntries, useExistingArticle, isExistingArticleSelected, tInvoicing]);
-const handleSelectArticle = async (value: string) => {
+ const handleSelectArticle = async (value: string) => {
   console.log('Selected article ID:', value);
   if (!value) return;
 
@@ -280,10 +191,78 @@ toast.error("Stock insuffisant"); return;
 
     setIsExistingArticleSelected(true);
     setQuantityError(null);
-    setReferenceError(null); // Reset reference error when selecting existing article
   } catch (error) {
     console.error('Error selecting article:', error);
 toast.error("Échec de la sélection de l'article");
+  }
+};
+
+const handleReferenceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const newReference = e.target.value.trim().toUpperCase();
+  
+  // Vérification du format
+  if (newReference && !newReference.match(/^REF-\d{6}-\d{3}$/)) {
+    toast.error("Le format de référence doit être REF-123456-789");
+    return;
+  }
+
+  // Vérification de l'unicité
+  const isDuplicate = existingEntries.some(entry => {
+    const entryRef = entry.article?.reference ?? (entry as any)?.reference;
+    return entryRef?.toUpperCase() === newReference && entry.id !== article.id;
+  });
+
+  if (isDuplicate) {
+    toast.error("Cette référence existe déjà");
+    return;
+  }
+
+  onChange({
+    ...article,
+    article: {
+      ...(article.article || createNewArticle()),
+      reference: newReference
+    },
+    reference: newReference
+  });
+};
+
+const generateUniqueReference = (existingRefs: string[] = []): string => {
+  let newRef: string;
+  let attempts = 0;
+  const maxAttempts = 100; // Limite pour éviter les boucles infinies
+
+  do {
+    newRef = generateRandomReference();
+    attempts++;
+    
+    if (attempts >= maxAttempts) {
+      throw new Error("Impossible de générer une référence unique après plusieurs tentatives");
+    }
+  } while (existingRefs.includes(newRef));
+
+  return newRef;
+};
+const handleGenerateReference = () => {
+  // Récupérer toutes les références existantes
+  const existingRefs = [
+    ...existingEntries.map(entry => entry.article?.reference || (entry as any)?.reference),
+    ...articles.map(art => art.reference)
+  ].filter(Boolean); // Filtrer les valeurs nulles/undefined
+
+  try {
+    const newRef = generateUniqueReference(existingRefs);
+    onChange({
+      ...article,
+      article: {
+        ...(article.article || createNewArticle()),
+        reference: newRef
+      },
+      reference: newRef
+    });
+  } catch (error) {
+    toast.error("Échec de génération d'une référence unique");
+    console.error(error);
   }
 };
   const handleUseExistingArticleChange = (checked: boolean) => {
@@ -496,44 +475,45 @@ toast.warning("Nombre maximum de taxes atteint");
     });
   };
 
-  useEffect(() => {
-  if (article.reference && !article.reference.startsWith('REF-')) {
-    const updatedArticle = {
-      ...article,
-      article: {
-        ...(article.article || {
-          id: 0,
-          title: '',
-          description: '',
-          reference: '',
-          quantityInStock: 1,
-          status: 'draft' as ArticleStatus, // Explicit type
-          version: 0,
-          unitPrice: article.unit_price || 0,
-          notes: '',
-          createdAt: new Date(), // Required
-          updatedAt: new Date(), // Required
-          // Optional properties
-          deletedAt: undefined,
-          isDeletionRestricted: false,
-          justificatifFile: undefined,
-          justificatifFileName: undefined,
-          justificatifMimeType: undefined,
-          justificatifFileSize: undefined,
-          history: undefined
-        }),
-        reference: 'REF-' + (article.reference || '')
-      },
-      reference: 'REF-' + (article.reference || '')
-    };
-    onChange(updatedArticle);
+  const generateRandomReference = () => {
+  const firstPart = Math.floor(100000 + Math.random() * 900000); // 6 chiffres
+  const secondPart = Math.floor(100 + Math.random() * 900); // 3 chiffres
+  return `REF-${firstPart}-${secondPart}`;
+};
+
+useEffect(() => {
+  if (!article.reference || !article.reference.match(/^REF-\d{6}-\d{3}$/)) {
+    // Récupérer toutes les références existantes
+    const existingRefs = [
+      ...existingEntries.map(entry => entry.article?.reference || (entry as any)?.reference),
+      ...articles.map(art => art.reference)
+    ].filter(Boolean);
+
+    try {
+      const newRef = generateUniqueReference(existingRefs);
+      const updatedArticle = {
+        ...article,
+        article: {
+          ...(article.article || createNewArticle()),
+          reference: newRef
+        },
+        reference: newRef
+      };
+      onChange(updatedArticle);
+    } catch (error) {
+      console.error("Failed to generate unique reference:", error);
+      // Vous pourriez aussi afficher un message à l'utilisateur ici
+    }
   }
 }, []);
 
 
   const selectedTaxIds = article.articleExpensQuotationEntryTaxes?.map((t) => t.tax?.id) || [];
 
-  return (
+  
+
+
+ return (
     <div className={cn('flex flex-row items-center gap-6 h-full', className)}>
       <div className="w-9/12">
         <div className="flex flex-row gap-2 my-1">
@@ -554,50 +534,44 @@ toast.warning("Nombre maximum de taxes atteint");
   
               {/* Reference Field */}
               {/* Reference Field */}
-              {/* Reference Field */}
+
 {/* Reference Field */}
 {/* Reference Field */}
-<div className="flex flex-col gap-1">
-  <Label className="mx-1">{tInvoicing('reference')}</Label>
-  {useExistingArticle || isExistingArticleSelected ? (
-    <UneditableInput 
-      value={article.reference || article.article?.reference || tInvoicing('no_reference')} 
-    />
-  ) : (
-    <div>
-      <Input
-        placeholder="REF-1234"
-        value={article.reference || article.article?.reference || 'REF-'}
-        onChange={handleReferenceChange}
-        className={referenceError ? 'border-red-500' : ''}
-        onBlur={() => {
-          // Validation supplémentaire lors du blur si nécessaire
-          if (article.reference && !referenceError) {
-            const isDuplicate = existingEntries.some(entry => {
-              if (entry.id === article.id) return false;
-              const entryRef = entry.article?.reference || (entry as any)?.reference;
-              return entryRef?.toUpperCase() === article.reference?.toUpperCase();
-            });
-            setReferenceError(isDuplicate ? tInvoicing('quotation.errors.reference_already_exists') : null);
-          }
-        }}
+{/* Reference Field */}
+<div className="flex flex-col gap-1 mb-2">
+  <Label className="mx-1">Référence</Label>
+  <div className="flex gap-2">
+    {useExistingArticle ? (
+      <UneditableInput 
+        value={article.article?.reference || ''} 
+        placeholder="Référence de l'article existant"
+        className="flex-1"
       />
-      {referenceError && (
-        <div className="text-red-500 text-xs mt-1 flex items-center gap-1">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-          </svg>
-          {referenceError}
-        </div>
-      )}
-      {!referenceError && !useExistingArticle && !isExistingArticleSelected && (
-        <span className="text-xs text-muted-foreground mt-1">
-          {tInvoicing('quotation.reference_hint')}
-        </span>
-      )}
-    </div>
-  )}
+    ) : (
+      <>
+        <Input
+          placeholder="REF-123456-789"
+          value={article.article?.reference || article.reference || ''}
+          onChange={handleReferenceChange}
+          pattern="^REF-\d{6}-\d{3}$"
+          title="Format: REF-123456-789"
+          disabled={isExistingArticleSelected}
+          className="flex-1"
+        />
+        <Button 
+          type="button"
+          variant="outline"
+          onClick={handleGenerateReference}
+          className="whitespace-nowrap"
+          disabled={useExistingArticle || isExistingArticleSelected}
+        >
+          {tInvoicing('generate_reference')}
+        </Button>
+      </>
+    )}
+  </div>
 </div>
+              
   
               {/* Title Field */}
               <div className="flex flex-col gap-1">

@@ -1,6 +1,6 @@
 import { Chart } from 'chart.js';
 import axios from './axios';
-import { Article, ArticleCompareResponseDto, ArticleStatus, BarcodeSearchResponse, CreateArticleDto, PagedArticle, QrCodeSearchResponse, ResponseArticleDto, UpdateArticleDto } from '@/types';
+import { Article, ArticleCompareResponseDto, ArticleStatus, BarcodeSearchResponse, CreateArticleDto, DeleteArticleResponse, PagedArticle, QrCodeSearchResponse, ResponseArticleDto, UpdateArticleDto } from '@/types';
 import { AxiosError, isAxiosError } from 'axios';
 
 interface IQueryObject {
@@ -214,14 +214,23 @@ const findArchivedArticles = async (
 
 const findActiveArticles = async (): Promise<ResponseArticleDto[]> => {
   try {
-    const response = await axios.get<ResponseArticleDto[]>('/public/article/list/active');
+    const response = await axios.get<ResponseArticleDto[]>('/public/article/list/active', {
+      params: {
+        filter: 'status||$ne||deleted,deletedAt||$eq||null',
+        cacheBuster: Date.now() // Empêche le cache
+      },
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    });
     return response.data;
   } catch (error) {
     console.error("Error fetching active articles:", error);
     throw new Error("Failed to fetch active articles");
   }
 };
-
 const create = async (article: CreateArticleDto): Promise<Article> => {
   const response = await axios.post<Article>('/public/article/save', article);
   return response.data;
@@ -258,28 +267,10 @@ const searchArticlesByTitle = async (
   }
 };
 
-const hardDelete = async (id: number): Promise<void> => {
-  await axios.delete(`/public/article/hard-delete/${id}`);
-};
 
 
-// Dans api.ts
-// Dans api.ts - Corriger la fonction remove
-const remove = async (id: number): Promise<{ success: boolean }> => {
-  try {
-    // Changer l'URL pour correspondre à votre backend
-    const response = await axios.delete<{ success: boolean }>(`/public/article/delete/${id}`);
-    
-    if (response.data.success) {
-      return { success: true };
-    } else {
-      throw new Error("Delete operation failed");
-    }
-  } catch (error) {
-    console.error("Error deleting article:", error);
-    throw error;
-  }
-};
+
+
 
 
 
@@ -872,13 +863,53 @@ const checkAvailability = async (
 
 
 
+const updateArticleStock = async (
+  id: number,
+  quantityChange: number
+): Promise<Article> => {
+  try {
+    const response = await axios.put<Article>(`/public/article/${id}/update-stock`, {
+      quantityChange
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Erreur lors de la mise à jour du stock:", error);
+    throw new Error("Impossible de mettre à jour le stock de l'article.");
+  }
+};
+
+const deleteArticle = async (id: number): Promise<DeleteArticleResponse> => {
+  try {
+    console.log('Sending delete request for article ID:', id);
+    const response = await axios.delete<ResponseArticleDto>(`/public/article/${id}`);
+    console.log('Delete response:', response.data);
+    
+    return {
+      success: true,
+      deletedArticle: response.data,
+      message: 'Article supprimé avec succès'
+    };
+  } catch (error) {
+    console.error("Delete error details:", error);
+    if (isAxiosError(error)) {
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Erreur lors de la suppression'
+      };
+    }
+    return {
+      success: false,
+      message: 'Une erreur inconnue est survenue'
+    };
+  }
+};
+
 
 export const article = {
   findPaginated,
   findOne,
   create,
   createWithFilterTitle,
-  remove,
   update,
   importExcel,
   generateQrCode,
@@ -921,8 +952,9 @@ export const article = {
   findActiveArticles,
   findArchivedArticles,
   restoreArticle,
-  hardDelete,
   extractFromPdf,
   findOneByReference,
-  checkAvailability
+  checkAvailability,
+  updateArticleStock,
+  deleteArticle
 };

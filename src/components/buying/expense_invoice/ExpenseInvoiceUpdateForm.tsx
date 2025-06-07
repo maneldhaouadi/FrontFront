@@ -282,8 +282,18 @@ export const ExpenseInvoiceUpdateForm = ({ className, invoiceId }: ExpenseInvoic
         .map((u) => u.file);
   
       const uploadIds = additionalFiles.length > 0 
-        ? await api.upload.uploadFiles(additionalFiles) 
-        : [];
+  ? await api.upload.uploadFiles(additionalFiles) 
+  : [];
+
+// Construction du tableau des uploads
+const uploads = [
+  // Fichiers déjà existants (garder seulement ceux qui sont toujours sélectionnés)
+  ...invoiceManager.uploadedFiles
+    .filter(u => u.upload?.id) // Ajoutez un champ isSelected pour gérer la sélection
+    .map(u => ({ uploadId: u.upload.id })),
+  // Nouveaux fichiers uploadés
+  ...uploadIds.map(id => ({ uploadId: id }))
+];
   
       // 4. Construction du DTO complet
       const invoiceDto: ExpenseUpdateInvoiceDto = {

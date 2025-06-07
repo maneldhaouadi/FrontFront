@@ -21,6 +21,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/common/Spinner';
+import { ResponseArticleDto } from '@/types';
 
 type ArticleStatus = 'draft' | 'active' | 'inactive' | 'archived' | 'out_of_stock' | 'pending_review';
 
@@ -32,8 +33,6 @@ const ArticleList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [articleToDelete, setArticleToDelete] = useState<number | null>(null);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrSearchTerm, setOcrSearchTerm] = useState('');
 
@@ -83,46 +82,52 @@ const ArticleList: React.FC = () => {
     }
   }, [articles, paginatedArticles, page]);
 
-  // Mutation de suppression optimisée
-  const { mutate: removeArticle, isLoading: isDeleting } = useMutation({
-    mutationFn: (id: number) => api.article.remove(id),
-    onMutate: async (id) => {
-      await queryClient.cancelQueries(['active-articles']);
-      const previousArticles = queryClient.getQueryData(['active-articles']);
+ 
+useEffect(() => {
+  console.log('Current articles:', articles);
+}, [articles]);
+
+const { mutate: deleteArticle } = useMutation({
+  mutationFn: (id: number) => api.article.deleteArticle(id),
+  onSuccess: (response, id) => {
+    if (response?.success) {
+      toast.success(response.message || 'Article supprimé avec succès');
       
-      queryClient.setQueryData(['active-articles'], (old: any) => 
-        old?.filter((article: any) => article.id !== id) || []
+      // Option 1: Invalidation immédiate + mise à jour optimiste
+      queryClient.setQueryData<ResponseArticleDto[]>(
+        ['active-articles'], 
+        (old) => old?.filter(a => a.id !== id) || []
       );
-
-      return { previousArticles };
-    },
-    onSuccess: () => {
-      toast.success(t('article.action_remove_success'));
-      queryClient.invalidateQueries(['active-articles']);
-    },
-    onError: (err, id, context: any) => {
-      queryClient.setQueryData(['active-articles'], context.previousArticles);
-      toast.error(t('article.action_remove_failure'));
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries(['active-articles']);
+      
+      // Option 2: Rechargement après un court délai
+      setTimeout(() => {
+        queryClient.invalidateQueries({
+          queryKey: ['active-articles'],
+          exact: true
+        });
+      }, 300);
+    } else {
+      toast.error(response?.message || 'Échec de la suppression');
     }
-  });
+  },
+  onError: (error) => {
+    console.error('Delete error:', error);
+    toast.error(`Erreur technique: ${error.message}`);
+  },
+  // Annule la mise à jour optimiste en cas d'erreur
+  onSettled: () => {
+    queryClient.invalidateQueries({ 
+      queryKey: ['active-articles'],
+      exact: true
+    });
+  }
+});
 
-  const { mutate: duplicateArticle } = useMutation({
-    mutationFn: (id: number) => api.article.duplicate(id),
-    onSuccess: (data) => {
-      toast.success(t('article.action_duplicate_success'));
-      router.push(`/articles/${data.id}`);
-    },
-    onError: () => {
-      toast.error(t('article.action_duplicate_failure'));
-    }
-  });
+  
 
   const { mutate: updateArticleStatus } = useMutation({
     mutationFn: ({ id, status }: { id: number; status: ArticleStatus }) => 
-      api.article.updateStatus(id, status),
+      api.article.updateArticleStatus(id, status),
     onSuccess: () => {
       toast.success(t('Statut mis à jour avec succès'));
       queryClient.invalidateQueries(['active-articles']);
@@ -168,29 +173,7 @@ const ArticleList: React.FC = () => {
     [handleExtractFromFile]
   );
 
-  const handleConfirmDelete = useCallback(async () => {
-    if (!articleToDelete) return;
-
-    try {
-      await removeArticle(articleToDelete);
-      setDeleteDialogOpen(false);
-      setArticleToDelete(null);
-    } catch (error) {
-      console.error("Delete error:", error);
-    }
-  }, [articleToDelete, removeArticle]);
-
-  const openDeleteDialog = useCallback((id: number) => {
-    setArticleToDelete(id);
-    setDeleteDialogOpen(true);
-  }, []);
-
-  const openDuplicateDialog = useCallback((id: number) => {
-    if (window.confirm(t('article.confirm_duplicate'))) {
-      duplicateArticle(id);
-    }
-  }, [duplicateArticle, t]);
-
+ 
   const handleStatusChange = useCallback((id: number, newStatus: ArticleStatus) => {
     updateArticleStatus({ id, status: newStatus });
   }, [updateArticleStatus]);
@@ -220,31 +203,29 @@ const ArticleList: React.FC = () => {
     setOcrSearchTerm('');
   }, []);
 
-  const contextValue = useMemo(() => ({
-    openDeleteDialog,
-    openDuplicateDialog,
-    searchTerm,
-    setSearchTerm: (term: string) => {
-      setSearchTerm(term);
-      setPage(1);
-    },
-    page,
-    totalPageCount: pageCount,
-    setPage,
-    size: pageSize,
-    setSize: setPageSize,
-    onStatusChange: handleStatusChange,
-    refetchArticles: refetch,
-  }), [
-    openDeleteDialog, 
-    openDuplicateDialog, 
-    searchTerm, 
-    page, 
-    pageCount, 
-    pageSize, 
-    handleStatusChange, 
-    refetch
-  ]);
+ const contextValue = useMemo(() => ({
+  searchTerm,
+  setSearchTerm: (term: string) => {
+    setSearchTerm(term);
+    setPage(1);
+  },
+  page,
+  totalPageCount: pageCount,
+  setPage,
+  size: pageSize,
+  setSize: setPageSize,
+  onStatusChange: handleStatusChange,
+  onDelete: deleteArticle,
+  refetchArticles: refetch,
+}), [
+  searchTerm, 
+  page, 
+  pageCount, 
+  pageSize, 
+  handleStatusChange, 
+  deleteArticle,
+  refetch
+]);
 
   if (error) {
     return (
@@ -438,39 +419,6 @@ const ArticleList: React.FC = () => {
         </CardContent>
       </Card>
 
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>{t('Confirmer la suppression')}</DialogTitle>
-            <DialogDescription>
-              {t('article.confirm_delete')}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button 
-              variant="outline"
-              size="sm"
-              className="h-8 px-4 text-sm"
-              onClick={() => setDeleteDialogOpen(false)}
-            >
-              {t('Annuler')}
-            </Button>
-            <Button 
-              variant="destructive"
-              size="sm"
-              className="h-8 px-4 text-sm"
-              onClick={handleConfirmDelete}
-              disabled={isDeleting}
-            >
-              {isDeleting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                t('Supprimer')
-              )}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </ArticleActionsContext.Provider>
   );
 };
