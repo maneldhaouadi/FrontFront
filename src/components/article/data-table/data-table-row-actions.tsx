@@ -214,7 +214,7 @@ export function DataTableRowActions({ row, onStatusChange, onDelete, onRestore }
         action: handleRestore,
         className: "text-green-600"
       },
-      {
+     {
         label: tCommon('commands.delete'),
         icon: <Trash2 className="h-4 w-4 mr-2 text-red-600" />,
         action: handleDelete,

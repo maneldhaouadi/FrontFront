@@ -251,10 +251,10 @@ const ArticleList: React.FC = () => {
           <div className="flex justify-between items-center">
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
-                {t('article.list_title')}
+                Liste des articles
               </CardTitle>
               <CardDescription className="text-sm">
-                {t('article.list_subtitle')}
+                Gérez vos articles, ajoutez, modifiez ou supprimez-les.
               </CardDescription>
             </div>
             <div className="flex gap-2">
@@ -264,7 +264,7 @@ const ArticleList: React.FC = () => {
                 onClick={() => router.push('/article/create-article')}
               >
                 <Plus className="h-3.5 w-3.5" />
-                <span>{t('article.new_article')}</span>
+                <span>Nouveau article</span>
               </Button>
             </div>
           </div>
@@ -274,7 +274,7 @@ const ArticleList: React.FC = () => {
           <div className="flex gap-2 mb-4">
             <div className="relative flex-1">
               <Input
-                placeholder={t('article.search_placeholder')}
+                placeholder="Rechercher..."
                 value={searchTerm}
                 onChange={handleSearchChange}
                 className="h-8 pl-8 text-sm"
@@ -371,7 +371,7 @@ const ArticleList: React.FC = () => {
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">
-                    {t('article.rows_per_page')}
+                    Lignes par page
                   </span>
                   <Select
                     value={pageSize.toString()}
@@ -401,7 +401,7 @@ const ArticleList: React.FC = () => {
                     <ChevronLeft className="h-3.5 w-3.5" />
                   </Button>
                   <div className="text-xs text-muted-foreground px-2">
-                    {t('common.page')} {page} {t('common.of')} {pageCount}
+                    Page {page} sur {pageCount}
                   </div>
                   <Button
                     variant="outline"

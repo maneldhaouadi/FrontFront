@@ -106,7 +106,7 @@ const ArticleHistoryList = ({ articleId }: { articleId: number }) => {
     }
     
     if (field === 'status') {
-      return t(`status.${value}`);
+      return value;
     }
     
     return value.toString();

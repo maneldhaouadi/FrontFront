@@ -131,7 +131,7 @@ export const ArticleDashboard = ({ firmId }: { firmId: number }) => {
   const prepareChartData = () => {
     const statusData = stats.statusOverview?.counts
       ? Object.entries(stats.statusOverview.counts).map(([name, value]) => ({
-          name: t(`status.${name}`),
+          name: t(`${name}`),
           value,
           color: STATUS_COLORS[name] || COLORS[0]
         }))

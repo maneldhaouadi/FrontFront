@@ -435,50 +435,46 @@ export const ExpenseInvoiceArticleItem: React.FC<ExpenseInvoiceArticleItemProps>
   <SelectTrigger>
     <SelectValue placeholder={tInvoicing('Select an article')} />
   </SelectTrigger>
-  <SelectContent>
-    <div className="p-2">
-      <Input
-        placeholder={tInvoicing('Search an article...')}
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-      />
-    </div>
-    {loading ? (
-      <SelectItem value="loading" disabled>
-        {tInvoicing('Loading...')}
-      </SelectItem>
-    ) : articles.length > 0 ? (
-      articles
-        .filter(art => 
-          art.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          art.reference?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-        .map((art) => (
-          <SelectItem 
-            key={art.id} 
-            value={art.id.toString()}
-            disabled={art.quantityInStock <= 0}
-            className={art.quantityInStock <= 0 ? 'opacity-50 cursor-not-allowed' : ''}
-          >
-            <div className="flex justify-between items-center">
-              <span>
-                {art.title} {art.reference ? `(${art.reference})` : ''}
-              </span>
-              <span className="text-xs text-muted-foreground ml-2">
-                {art.quantityInStock <= 0 ? 
-                  tInvoicing('out_of_stock') : 
-                  `${art.quantityInStock} ${tInvoicing('available')}`
-                }
-              </span>
-            </div>
-          </SelectItem>
-        ))
-    ) : (
-      <SelectItem value="no-articles" disabled>
-        {tInvoicing('No articles available')}
-      </SelectItem>
-    )}
-  </SelectContent>
+<SelectContent>
+  <div className="p-2">
+    <Input
+      placeholder={tInvoicing('Search an article...')}
+      value={searchQuery}
+      onChange={(e) => setSearchQuery(e.target.value)}
+    />
+  </div>
+  {loading ? (
+    <SelectItem value="loading" disabled>
+      {tInvoicing('Loading...')}
+    </SelectItem>
+  ) : articles.filter(art => art.quantityInStock > 0).length > 0 ? (
+    articles
+      .filter(art => art.quantityInStock > 0) // Filtrer uniquement les articles disponibles
+      .filter(art => 
+        art.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        art.reference?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+      .map((art) => (
+        <SelectItem 
+          key={art.id} 
+          value={art.id.toString()}
+        >
+          <div className="flex justify-between items-center">
+            <span>
+              {art.title} {art.reference ? `(${art.reference})` : ''}
+            </span>
+            <span className="text-xs text-muted-foreground ml-2">
+              {art.quantityInStock} {tInvoicing('available')}
+            </span>
+          </div>
+        </SelectItem>
+      ))
+  ) : (
+    <SelectItem value="no-articles" disabled>
+      {tInvoicing('No available articles in stock')}
+    </SelectItem>
+  )}
+</SelectContent>
 </Select>
                 ) : (
                   <>

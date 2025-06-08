@@ -56,7 +56,7 @@ export const getArticleColumns = (
       enableSorting: false,
       enableHiding: false
     },
-    {
+     {
       accessorKey: 'status',
       header: ({ column }) => (
         <DataTableColumnHeader

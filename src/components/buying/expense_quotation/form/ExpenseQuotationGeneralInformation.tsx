@@ -79,7 +79,7 @@ export const ExpenseQuotationGeneralInformation = ({
       if (exists) {
         quotationManager.setError(
           'sequentialNumbr', 
-          tInvoicing('quotation.sequential_number_already_exists')
+          tInvoicing('Ce numéro séquentiel existe deja')
         );
         return false;
       }

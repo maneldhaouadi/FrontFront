@@ -159,19 +159,32 @@ export const ExpenseInvoiceControlSection = ({
 ].filter(Boolean) as ExpenseInvoiceLifecycle[];
   const sequential = invoiceManager.sequentialNumbr;
 
-  function convertQuotationEntryToInvoiceEntry(
+ function convertQuotationEntryToInvoiceEntry(
   quotationEntry: ExpenseArticleQuotationEntry
-): ExpenseArticleInvoiceEntry | null {  // Retourne null si la quantité est invalide
+): ExpenseArticleInvoiceEntry | null {
   // Vérifier que la quantité est définie et supérieure à 0
   if (!quotationEntry.quantity || quotationEntry.quantity <= 0) {
-    toast.error(`La quantité pour l'article ${quotationEntry.article?.title || ''} est invalide`);
+    return null;
+  }
+
+  // Vérifier que l'article existe et a du stock disponible
+  if (!quotationEntry.article) {
+    return null;
+  }
+
+  // Calculer la quantité disponible (en prenant le minimum entre la quantité demandée et le stock disponible)
+  const availableQuantity = quotationEntry.article.quantityInStock !== undefined 
+    ? Math.min(quotationEntry.quantity, quotationEntry.article.quantityInStock)
+    : quotationEntry.quantity;
+
+  if (availableQuantity <= 0) {
     return null;
   }
 
   return {
-    id: 0, // Nouvel ID sera généré
+    id: 0,
     article: quotationEntry.article,
-    quantity: quotationEntry.quantity,
+    quantity: availableQuantity,
     unit_price: quotationEntry.unit_price,
     discount: quotationEntry.discount,
     discount_type: quotationEntry.discount_type,

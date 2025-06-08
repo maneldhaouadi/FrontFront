@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { ChevronLeft, ChevronRight, PackageSearch, RotateCcw, Search } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArticleStatus } from '@/types';
+import { ArticleActionsContext } from './data-table/ActionsContext';
 
 const ArchivedArticleList: React.FC = () => {
   const router = useRouter();
@@ -62,7 +63,27 @@ const ArchivedArticleList: React.FC = () => {
       toast.error(error.message || t('article:status_update_error'));
     }
   });
+ const { mutate: deleteArticle } = useMutation({
+    mutationFn: (id: number) => api.article.deleteArticle(id),
+    onSuccess: () => {
+      toast.success(t('article.delete_success'));
+      queryClient.invalidateQueries({ queryKey: ['active-articles'] });
+    },
+    onError: (error) => {
+      console.error("Delete error:", error);
+      toast.error(error.message || t('article.delete_error'));
+    }
+  });
 
+   const handleDelete = useCallback(async (id: number) => {
+      try {
+        await deleteArticle(id);
+      } catch (error) {
+        console.error("Delete error:", error);
+        toast.error(error.message || t('article.delete_error'));
+      }
+    }, [deleteArticle, t]);
+  
   const handleStatusChange = async (id: number, newStatus: ArticleStatus) => {
     try {
       await updateStatusMutation.mutateAsync({ id, status: newStatus });
@@ -78,7 +99,29 @@ const ArchivedArticleList: React.FC = () => {
   const goToPreviousPage = () => page > 1 && setPage(page - 1);
   const goToNextPage = () => page < pageCount && setPage(page + 1);
   const goBackToActive = () => router.push('/article/article-Lists');
-
+ const contextValue = useMemo(() => ({
+    searchTerm,
+    setSearchTerm: (term: string) => {
+      setSearchTerm(term);
+      setPage(1);
+    },
+    page,
+    totalPageCount: pageCount,
+    setPage,
+    size: pageSize,
+    setSize: setPageSize,
+    onStatusChange: handleStatusChange,
+    onDelete: handleDelete,
+    refetchArticles: refetch,
+  }), [
+    searchTerm, 
+    page, 
+    pageCount, 
+    pageSize, 
+    handleStatusChange,
+    handleDelete,
+    refetch
+  ]);
   if (error) {
     return (
       <div className="p-4 text-red-500">
@@ -96,6 +139,7 @@ const ArchivedArticleList: React.FC = () => {
   }
 
   return (
+      <ArticleActionsContext.Provider value={contextValue}>
     <Card className="flex flex-col flex-1 overflow-hidden">
       <CardHeader className="flex flex-col space-y-1.5">
         <div className="flex justify-between items-center">
@@ -149,6 +193,7 @@ const ArchivedArticleList: React.FC = () => {
           )}
           isPending={isLoading || updateStatusMutation.isPending}
         />
+        
 
         {isLoading && (
           <div className="p-4 text-center text-muted-foreground">
@@ -212,6 +257,8 @@ const ArchivedArticleList: React.FC = () => {
         )}
       </CardContent>
     </Card>
+        </ArticleActionsContext.Provider>
+    
   );
 };
 
