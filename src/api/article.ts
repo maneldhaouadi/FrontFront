@@ -825,12 +825,14 @@ const unarchiveArticle = async (id: number): Promise<ResponseArticleDto> => {
 const restoreArticle = async (id: number): Promise<ResponseArticleDto> => {
   try {
     const response = await axios.post<ResponseArticleDto>(
-      `/public/article/${id}/restore`
+      `/public/article/${id}/restore-archived`
     );
     return response.data;
-  } catch (error) {
-    console.error("Error restoring article:", error);
-    throw new Error("Failed to restore article");
+  } catch (error: unknown) {
+    if (isAxiosError(error)) {
+      throw new Error(error.response?.data?.message || 'Failed to restore article');
+    }
+    throw error;
   }
 };
 
@@ -877,34 +879,22 @@ const updateArticleStock = async (
     throw new Error("Impossible de mettre à jour le stock de l'article.");
   }
 };
-
 const deleteArticle = async (id: number): Promise<DeleteArticleResponse> => {
   try {
-    console.log('Sending delete request for article ID:', id);
-    const response = await axios.delete<ResponseArticleDto>(`/public/article/${id}`);
-    console.log('Delete response:', response.data);
-    
+    const response = await axios.delete<ResponseArticleDto>(`/public/article/delete/${id}`);
     return {
       success: true,
       deletedArticle: response.data,
-      message: 'Article supprimé avec succès'
+      message: 'Article marqué comme supprimé avec succès'
     };
   } catch (error) {
-    console.error("Delete error details:", error);
-    if (isAxiosError(error)) {
-      return {
-        success: false,
-        message: error.response?.data?.message || 'Erreur lors de la suppression'
-      };
-    }
+    console.error('Delete error:', error);
     return {
       success: false,
-      message: 'Une erreur inconnue est survenue'
+      message:  'Échec de la suppression de l\'article'
     };
   }
 };
-
-
 export const article = {
   findPaginated,
   findOne,

@@ -24,12 +24,23 @@ interface DataTableRowActionsProps {
   onRestore?: (id: number) => Promise<void>;
 }
 
-type ActionItem = {
+type BaseAction = {
   label: string;
   icon: React.ReactNode;
-  action: () => Promise<void> | void;
+  action: () => void;
+  show: boolean;
   className?: string;
-  disabled?: boolean;
+};
+
+type StatusAction = {
+  label: string;
+  icon: React.ReactNode;
+  action: () => Promise<void>;
+  className: string;
+};
+
+type StatusActions = {
+  [key in ArticleStatus]?: StatusAction[];
 };
 
 export function DataTableRowActions({ row, onStatusChange, onDelete, onRestore }: DataTableRowActionsProps) {
@@ -74,13 +85,23 @@ export function DataTableRowActions({ row, onStatusChange, onDelete, onRestore }
     if (!window.confirm(confirmMessage)) return;
 
     await handleAction(async () => {
-      if (!onRestore) return;
-      await onRestore(article.id);
-      toast.success(tArticle('restore_success'));
+      const response = await api.article.updateArticleStatus(article.id, 'active');
+      
+      if (!response) {
+        throw new Error('Empty response');
+      }
+      
+      toast.success(tArticle('status_update_success.active'));
+      onStatusChange?.(article.id, 'active');
     }, 'restore');
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async () => {
+    if (!onDelete) {
+      toast.error(tArticle('delete_not_available'));
+      return;
+    }
+
     let confirmMessage = tArticle('confirm_delete_draft');
     
     if (article.status === 'inactive') {
@@ -94,9 +115,7 @@ export function DataTableRowActions({ row, onStatusChange, onDelete, onRestore }
     if (!window.confirm(confirmMessage)) return;
 
     await handleAction(async () => {
-      if (!onDelete) return;
-      await onDelete(id);
-      toast.success(tArticle('delete_success'));
+      await onDelete(article.id);
     }, 'delete');
   };
 
@@ -104,7 +123,7 @@ export function DataTableRowActions({ row, onStatusChange, onDelete, onRestore }
     router.push(path);
   };
 
-  const baseActions = React.useMemo(() => [
+  const baseActions = React.useMemo<BaseAction[]>(() => [
     {
       label: tCommon('commands.inspect'),
       icon: <Eye className="h-4 w-4 mr-2" />,
@@ -125,7 +144,7 @@ export function DataTableRowActions({ row, onStatusChange, onDelete, onRestore }
     }
   ], [article.id, article.status, tCommon]);
 
-  const statusActions = React.useMemo(() => ({
+  const statusActions = React.useMemo<StatusActions>(() => ({
     draft: [
       {
         label: tCommon('commands.activate'),
@@ -136,7 +155,7 @@ export function DataTableRowActions({ row, onStatusChange, onDelete, onRestore }
       {
         label: tCommon('commands.delete'),
         icon: <Trash2 className="h-4 w-4 mr-2 text-red-600" />,
-        action: () => handleDelete(article.id),
+        action: handleDelete,
         className: "text-red-600"
       }
     ],
@@ -156,7 +175,7 @@ export function DataTableRowActions({ row, onStatusChange, onDelete, onRestore }
       {
         label: tCommon('commands.delete'),
         icon: <Trash2 className="h-4 w-4 mr-2 text-red-600" />,
-        action: () => handleDelete(article.id),
+        action: handleDelete,
         className: "text-red-600"
       }
     ],
@@ -170,7 +189,7 @@ export function DataTableRowActions({ row, onStatusChange, onDelete, onRestore }
       {
         label: tCommon('commands.delete'),
         icon: <Trash2 className="h-4 w-4 mr-2 text-red-600" />,
-        action: () => handleDelete(article.id),
+        action: handleDelete,
         className: "text-red-600"
       }
     ],
@@ -198,11 +217,11 @@ export function DataTableRowActions({ row, onStatusChange, onDelete, onRestore }
       {
         label: tCommon('commands.delete'),
         icon: <Trash2 className="h-4 w-4 mr-2 text-red-600" />,
-        action: () => handleDelete(article.id),
+        action: handleDelete,
         className: "text-red-600"
       }
     ]
-  }), [article.id, tCommon, handleStatusChange, handleRestore]);
+  }), [article.id, article.status, tCommon, handleStatusChange, handleRestore, handleDelete]);
 
   const isActionInProgress = (actionName: string) => actionInProgress === actionName;
 

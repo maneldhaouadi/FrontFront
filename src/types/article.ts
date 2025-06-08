@@ -103,6 +103,7 @@ export interface ArticleExtractedData {
   quantityInStock?: number;
   status?: string;
   unitPrice?: number;
+  notes?: string;
   rawText?: string;
   confidenceScores?: {
     title?: number;

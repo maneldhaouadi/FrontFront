@@ -19,14 +19,18 @@ const LanguageSwitcher = () => {
   const { i18n } = useTranslation();
 
   return (
-    <div className="flex gap-3 px-2"> {/* Ajout de padding horizontal */}
+    <div className="flex gap-2 px-2">
       {['en', 'fr'].map((lang) => (
         <button
           key={lang}
           onClick={() => i18n.changeLanguage(lang)}
           className={`
-            p-1 rounded-md text-white text-lg
-            ${i18n.language === lang ? 'bg-slate-700' : 'hover:bg-slate-800/50'}
+            p-2 rounded-md text-white text-lg
+            transition-colors duration-200
+            ${i18n.language === lang 
+              ? 'bg-slate-700' 
+              : 'hover:bg-slate-800/50'
+            }
           `}
         >
           {lang === 'en' ? '🇬🇧' : '🇫🇷'}

@@ -1,0 +1,60 @@
+{
+  "articles": {
+    "list": {
+      "title": "Articles List",
+      "addNew": "Add New Article",
+      "search": "Search articles...",
+      "columns": {
+        "title": "Title",
+        "description": "Description",
+        "price": "Price",
+        "stock": "Stock",
+        "actions": "Actions"
+      },
+      "actions": {
+        "edit": "Edit",
+        "delete": "Delete",
+        "view": "View"
+      },
+      "deleteConfirm": {
+        "title": "Delete Article",
+        "message": "Are you sure you want to delete this article?",
+        "confirm": "Yes, delete",
+        "cancel": "Cancel"
+      },
+      "success": {
+        "deleted": "Article deleted successfully",
+        "updated": "Article updated successfully"
+      },
+      "error": {
+        "delete": "Error deleting article",
+        "load": "Error loading articles"
+      }
+    }
+  },
+  "article": {
+    "status_update_success": "Article status updated successfully",
+    "status_update_error": "Error updating article status",
+    "restore_success": "Article restored successfully",
+    "restore_error": "Error restoring article",
+    "delete_success": "Article deleted successfully",
+    "delete_error": "Error deleting article"
+  },
+  "ocr": {
+    "extract_success": "Text extracted successfully",
+    "no_title_detected": "No title detected in document",
+    "pdf_extract_error": "Error extracting from PDF",
+    "image_extract_error": "Error extracting from image"
+  },
+  "error": {
+    "load_articles": "Error loading articles"
+  },
+  "common": {
+    "retry": "Retry"
+  },
+  "language": {
+    "en": "English",
+    "fr": "French",
+    "switch": "Change language"
+  }
+} 

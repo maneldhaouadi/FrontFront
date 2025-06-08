@@ -1,0 +1,60 @@
+{
+  "articles": {
+    "list": {
+      "title": "Liste des Articles",
+      "addNew": "Ajouter un nouvel article",
+      "search": "Rechercher un article...",
+      "columns": {
+        "title": "Titre",
+        "description": "Description",
+        "price": "Prix",
+        "stock": "Stock",
+        "actions": "Actions"
+      },
+      "actions": {
+        "edit": "Modifier",
+        "delete": "Supprimer",
+        "view": "Voir"
+      },
+      "deleteConfirm": {
+        "title": "Supprimer l'article",
+        "message": "Êtes-vous sûr de vouloir supprimer cet article ?",
+        "confirm": "Oui, supprimer",
+        "cancel": "Annuler"
+      },
+      "success": {
+        "deleted": "Article supprimé avec succès",
+        "updated": "Article mis à jour avec succès"
+      },
+      "error": {
+        "delete": "Erreur lors de la suppression de l'article",
+        "load": "Erreur lors du chargement des articles"
+      }
+    }
+  },
+  "article": {
+    "status_update_success": "Statut de l'article mis à jour avec succès",
+    "status_update_error": "Erreur lors de la mise à jour du statut",
+    "restore_success": "Article restauré avec succès",
+    "restore_error": "Erreur lors de la restauration de l'article",
+    "delete_success": "Article supprimé avec succès",
+    "delete_error": "Erreur lors de la suppression de l'article"
+  },
+  "ocr": {
+    "extract_success": "Texte extrait avec succès",
+    "no_title_detected": "Aucun titre détecté dans le document",
+    "pdf_extract_error": "Erreur lors de l'extraction du PDF",
+    "image_extract_error": "Erreur lors de l'extraction de l'image"
+  },
+  "error": {
+    "load_articles": "Erreur lors du chargement des articles"
+  },
+  "common": {
+    "retry": "Réessayer"
+  },
+  "language": {
+    "en": "Anglais",
+    "fr": "Français",
+    "switch": "Changer la langue"
+  }
+} 

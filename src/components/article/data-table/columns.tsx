@@ -1,12 +1,15 @@
 import { Badge } from '@/components/ui/badge';
 import { ColumnDef } from '@tanstack/react-table';
 import { DataTableRowActions } from './data-table-row-actions';
-import { Article } from '@/types';
+import { Article, ArticleStatus } from '@/types';
 import { DataTableColumnHeader } from '@/components/administrative-tools/Logger/data-table/data-table-column-header';
 
 export const getArticleColumns = (
   t: Function,
-  router: any
+  router: any,
+  onDelete?: (id: number) => Promise<void>,
+  onStatusChange?: (id: number, status: ArticleStatus) => void,
+  onRestore?: (id: number) => Promise<void>
 ): ColumnDef<Article>[] => {
   const translationNamespace = 'article';
   const translate = (value: string, namespace: string = '') => {
@@ -75,7 +78,12 @@ export const getArticleColumns = (
       id: 'actions',
       cell: ({ row }) => (
         <div className="flex justify-end">
-          <DataTableRowActions row={row} />
+          <DataTableRowActions 
+            row={row} 
+            onDelete={onDelete}
+            onStatusChange={onStatusChange}
+            onRestore={onRestore}
+          />
         </div>
       ),
       enableSorting: false,

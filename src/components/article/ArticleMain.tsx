@@ -11,19 +11,10 @@ import { Input } from '@/components/ui/input';
 import { ChevronLeft, ChevronRight, Plus, Search, Archive, Loader2, ImageIcon, FileTextIcon } from 'lucide-react';
 import { ArticleActionsContext } from './data-table/ActionsContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/common/Spinner';
-import { ResponseArticleDto } from '@/types';
-
-type ArticleStatus = 'draft' | 'active' | 'inactive' | 'archived' | 'out_of_stock' | 'pending_review';
+import { ResponseArticleDto, ArticleStatus } from '@/types';
 
 const ArticleList: React.FC = () => {
   const router = useRouter();
@@ -36,6 +27,7 @@ const ArticleList: React.FC = () => {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrSearchTerm, setOcrSearchTerm] = useState('');
 
+  // Fetch articles data
   const {
     data: articles = [],
     isLoading,
@@ -60,9 +52,47 @@ const ArticleList: React.FC = () => {
         return matchesRegularSearch && matchesOcrSearch;
       });
     },
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 5, // 5 minutes cache
   });
 
+  // Mutations for article actions
+  const { mutate: updateArticleStatus } = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: ArticleStatus }) => 
+      api.article.updateArticleStatus(id, status),
+    onSuccess: () => {
+      toast.success(t('article.status_update_success'));
+      queryClient.invalidateQueries(['active-articles']);
+    },
+    onError: (error) => {
+      toast.error(error.message || t('article.status_update_error'));
+      console.error("Update status error:", error);
+    }
+  });
+
+  const { mutate: restoreArticle } = useMutation({
+    mutationFn: (id: number) => api.article.restoreArticle(id),
+    onSuccess: () => {
+      toast.success(t('article.restore_success'));
+      queryClient.invalidateQueries(['active-articles']);
+    },
+    onError: (error) => {
+      toast.error(error.message || t('article.restore_error'));
+    }
+  });
+
+  const { mutate: deleteArticle } = useMutation({
+    mutationFn: (id: number) => api.article.deleteArticle(id),
+    onSuccess: () => {
+      toast.success(t('article.delete_success'));
+      queryClient.invalidateQueries({ queryKey: ['active-articles'] });
+    },
+    onError: (error) => {
+      console.error("Delete error:", error);
+      toast.error(error.message || t('article.delete_error'));
+    }
+  });
+
+  // Pagination logic
   const { paginatedArticles, pageCount } = useMemo(() => {
     const startIndex = (page - 1) * pageSize;
     const endIndex = page * pageSize;
@@ -72,71 +102,19 @@ const ArticleList: React.FC = () => {
     };
   }, [articles, page, pageSize]);
 
+  // Reset page when search terms change
   useEffect(() => {
     setPage(1);
   }, [searchTerm, ocrSearchTerm]);
 
+  // Adjust page if current page is empty
   useEffect(() => {
     if (articles.length > 0 && paginatedArticles.length === 0 && page > 1) {
       setPage(page - 1);
     }
   }, [articles, paginatedArticles, page]);
 
- 
-useEffect(() => {
-  console.log('Current articles:', articles);
-}, [articles]);
-
-const { mutate: deleteArticle } = useMutation({
-  mutationFn: (id: number) => api.article.deleteArticle(id),
-  onSuccess: (response, id) => {
-    if (response?.success) {
-      toast.success(response.message || 'Article supprimé avec succès');
-      
-      // Option 1: Invalidation immédiate + mise à jour optimiste
-      queryClient.setQueryData<ResponseArticleDto[]>(
-        ['active-articles'], 
-        (old) => old?.filter(a => a.id !== id) || []
-      );
-      
-      // Option 2: Rechargement après un court délai
-      setTimeout(() => {
-        queryClient.invalidateQueries({
-          queryKey: ['active-articles'],
-          exact: true
-        });
-      }, 300);
-    } else {
-      toast.error(response?.message || 'Échec de la suppression');
-    }
-  },
-  onError: (error) => {
-    console.error('Delete error:', error);
-    toast.error(`Erreur technique: ${error.message}`);
-  },
-  // Annule la mise à jour optimiste en cas d'erreur
-  onSettled: () => {
-    queryClient.invalidateQueries({ 
-      queryKey: ['active-articles'],
-      exact: true
-    });
-  }
-});
-
-  
-
-  const { mutate: updateArticleStatus } = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: ArticleStatus }) => 
-      api.article.updateArticleStatus(id, status),
-    onSuccess: () => {
-      toast.success(t('Statut mis à jour avec succès'));
-      queryClient.invalidateQueries(['active-articles']);
-    },
-    onError: () => {
-      toast.error(t('Erreur lors de la mise à jour du statut'));
-    }
-  });
-
+  // OCR file handling
   const handleExtractFromFile = useCallback(async (file: File, isPdf = false) => {
     setOcrLoading(true);
     setOcrSearchTerm('');
@@ -148,16 +126,16 @@ const { mutate: deleteArticle } = useMutation({
       
       if (result.title) {
         setOcrSearchTerm(result.title);
-        toast.success(t('Données extraites avec succès'));
+        toast.success(t('ocr.extract_success'));
       } else {
-        toast.warning(t('Aucun titre détecté dans le document'));
+        toast.warning(t('ocr.no_title_detected'));
       }
     } catch (error) {
       console.error('Extraction Error:', error);
       toast.error(
         isPdf 
-          ? t('Erreur lors de l\'extraction du PDF. Veuillez vérifier la qualité du document.')
-          : t('Erreur lors de l\'extraction de l\'image. Veuillez vérifier la qualité de l\'image.')
+          ? t('ocr.pdf_extract_error')
+          : t('ocr.image_extract_error')
       );
     } finally {
       setOcrLoading(false);
@@ -173,11 +151,35 @@ const { mutate: deleteArticle } = useMutation({
     [handleExtractFromFile]
   );
 
- 
-  const handleStatusChange = useCallback((id: number, newStatus: ArticleStatus) => {
-    updateArticleStatus({ id, status: newStatus });
-  }, [updateArticleStatus]);
+  // Action handlers
+  const handleStatusChange = useCallback(async (id: number, newStatus: ArticleStatus) => {
+    try {
+      await updateArticleStatus({ id, status: newStatus });
+    } catch (error) {
+      console.error("Status update error:", error);
+      toast.error(error.message || t('article.status_update_error'));
+    }
+  }, [updateArticleStatus, t]);
 
+  const handleRestore = useCallback(async (id: number) => {
+    try {
+      await restoreArticle(id);
+    } catch (error) {
+      console.error("Restore error:", error);
+      toast.error(error.message || t('article.restore_error'));
+    }
+  }, [restoreArticle, t]);
+
+  const handleDelete = useCallback(async (id: number) => {
+    try {
+      await deleteArticle(id);
+    } catch (error) {
+      console.error("Delete error:", error);
+      toast.error(error.message || t('article.delete_error'));
+    }
+  }, [deleteArticle, t]);
+
+  // Pagination controls
   const goToPreviousPage = useCallback(() => {
     if (page > 1) setPage(page - 1);
   }, [page]);
@@ -185,10 +187,6 @@ const { mutate: deleteArticle } = useMutation({
   const goToNextPage = useCallback(() => {
     if (page < pageCount) setPage(page + 1);
   }, [page, pageCount]);
-
-  const goToArchive = useCallback(() => {
-    router.push('/articles/archives');
-  }, [router]);
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
@@ -203,41 +201,44 @@ const { mutate: deleteArticle } = useMutation({
     setOcrSearchTerm('');
   }, []);
 
- const contextValue = useMemo(() => ({
-  searchTerm,
-  setSearchTerm: (term: string) => {
-    setSearchTerm(term);
-    setPage(1);
-  },
-  page,
-  totalPageCount: pageCount,
-  setPage,
-  size: pageSize,
-  setSize: setPageSize,
-  onStatusChange: handleStatusChange,
-  onDelete: deleteArticle,
-  refetchArticles: refetch,
-}), [
-  searchTerm, 
-  page, 
-  pageCount, 
-  pageSize, 
-  handleStatusChange, 
-  deleteArticle,
-  refetch
-]);
+  // Context value for actions
+  const contextValue = useMemo(() => ({
+    searchTerm,
+    setSearchTerm: (term: string) => {
+      setSearchTerm(term);
+      setPage(1);
+    },
+    page,
+    totalPageCount: pageCount,
+    setPage,
+    size: pageSize,
+    setSize: setPageSize,
+    onStatusChange: handleStatusChange,
+    onRestore: handleRestore,
+    onDelete: handleDelete,
+    refetchArticles: refetch,
+  }), [
+    searchTerm, 
+    page, 
+    pageCount, 
+    pageSize, 
+    handleStatusChange,
+    handleRestore,
+    handleDelete,
+    refetch
+  ]);
 
   if (error) {
     return (
       <div className="p-4 text-center">
-        <p className="text-red-500 mb-2">{t('Une erreur est survenue lors du chargement des articles')}</p>
+        <p className="text-red-500 mb-2">{t('error.load_articles')}</p>
         <Button 
           variant="outline" 
           size="sm"
           onClick={() => refetch()}
           className="h-8 px-4 text-sm"
         >
-          {t('Réessayer')}
+          {t('common.retry')}
         </Button>
       </div>
     );
@@ -250,10 +251,10 @@ const { mutate: deleteArticle } = useMutation({
           <div className="flex justify-between items-center">
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
-                {t('Liste des articles')}
+                {t('article.list_title')}
               </CardTitle>
               <CardDescription className="text-sm">
-                {t('Gestion des articles actifs')}
+                {t('article.list_subtitle')}
               </CardDescription>
             </div>
             <div className="flex gap-2">
@@ -263,7 +264,7 @@ const { mutate: deleteArticle } = useMutation({
                 onClick={() => router.push('/article/create-article')}
               >
                 <Plus className="h-3.5 w-3.5" />
-                <span>{t('Nouvel article')}</span>
+                <span>{t('article.new_article')}</span>
               </Button>
             </div>
           </div>
@@ -273,7 +274,7 @@ const { mutate: deleteArticle } = useMutation({
           <div className="flex gap-2 mb-4">
             <div className="relative flex-1">
               <Input
-                placeholder={t('Rechercher un article...')}
+                placeholder={t('article.search_placeholder')}
                 value={searchTerm}
                 onChange={handleSearchChange}
                 className="h-8 pl-8 text-sm"
@@ -329,7 +330,7 @@ const { mutate: deleteArticle } = useMutation({
           {ocrSearchTerm && (
             <div className="flex items-center gap-2 mb-4 p-2 bg-blue-50 rounded-md">
               <span className="text-sm text-blue-800">
-                {t('Recherche par OCR')}: "{ocrSearchTerm}"
+                {t('ocr.search_label')}: "{ocrSearchTerm}"
               </span>
               <Button
                 variant="ghost"
@@ -337,7 +338,7 @@ const { mutate: deleteArticle } = useMutation({
                 onClick={clearOcrSearch}
                 className="h-6 px-2 text-xs text-blue-800 hover:text-blue-900"
               >
-                {t('Effacer')}
+                {t('common.clear')}
               </Button>
             </div>
           )}
@@ -345,22 +346,22 @@ const { mutate: deleteArticle } = useMutation({
           <ScrollArea className="flex-1 pr-4 mb-4">
             <DataTable
               data={paginatedArticles}
-              columns={getArticleColumns(t, router)}
+              columns={getArticleColumns(t, router, handleDelete, handleStatusChange, handleRestore)}
               isPending={isLoading}
             />
 
             {isLoading && (
               <div className="p-4 text-center text-muted-foreground">
                 <Spinner className="mx-auto" size="small" />
-                <p className="mt-2">{t('Chargement des articles...')}</p>
+                <p className="mt-2">{t('article.loading')}</p>
               </div>
             )}
 
             {!isLoading && articles.length === 0 && (
               <div className="p-4 text-center text-muted-foreground">
                 {searchTerm || ocrSearchTerm
-                  ? t('Aucun article ne correspond à votre recherche') 
-                  : t('Aucun article trouvé')}
+                  ? t('article.no_results') 
+                  : t('article.empty_list')}
               </div>
             )}
           </ScrollArea>
@@ -370,7 +371,7 @@ const { mutate: deleteArticle } = useMutation({
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">
-                    {t('Lignes par page')}
+                    {t('article.rows_per_page')}
                   </span>
                   <Select
                     value={pageSize.toString()}
@@ -396,11 +397,11 @@ const { mutate: deleteArticle } = useMutation({
                     onClick={goToPreviousPage}
                     disabled={page === 1}
                   >
-                    <span className="sr-only">{t('Page précédente')}</span>
+                    <span className="sr-only">{t('common.previous_page')}</span>
                     <ChevronLeft className="h-3.5 w-3.5" />
                   </Button>
                   <div className="text-xs text-muted-foreground px-2">
-                    {t('Page')} {page} {t('sur')} {pageCount}
+                    {t('common.page')} {page} {t('common.of')} {pageCount}
                   </div>
                   <Button
                     variant="outline"
@@ -409,7 +410,7 @@ const { mutate: deleteArticle } = useMutation({
                     onClick={goToNextPage}
                     disabled={page >= pageCount}
                   >
-                    <span className="sr-only">{t('Page suivante')}</span>
+                    <span className="sr-only">{t('common.next_page')}</span>
                     <ChevronRight className="h-3.5 w-3.5" />
                   </Button>
                 </div>
@@ -418,7 +419,6 @@ const { mutate: deleteArticle } = useMutation({
           )}
         </CardContent>
       </Card>
-
     </ArticleActionsContext.Provider>
   );
 };

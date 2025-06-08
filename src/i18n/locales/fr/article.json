@@ -1,0 +1,30 @@
+{
+  "restore_success": "Article restauré avec succès",
+  "restore_error": "Erreur lors de la restauration de l'article",
+  "restore_not_available": "Cet article ne peut pas être restauré",
+  "not_found": "Article non trouvé",
+  "error": {
+    "fetch_archived": "Erreur lors de la récupération des articles archivés",
+    "fetch_active": "Erreur lors de la récupération des articles actifs"
+  },
+  "archived_articles": "Articles archivés",
+  "active_articles": "Articles actifs",
+  "search_placeholder": "Rechercher un article...",
+  "reference": "Référence",
+  "title": "Titre",
+  "stock": "Stock",
+  "price": "Prix",
+  "status": "Statut",
+  "actions": "Actions",
+  "restore": "Restaurer",
+  "delete": "Supprimer",
+  "status": {
+    "draft": "Brouillon",
+    "active": "Actif",
+    "inactive": "Inactif",
+    "archived": "Archivé",
+    "out_of_stock": "Rupture de stock",
+    "pending_review": "En attente de révision",
+    "deleted": "Supprimé"
+  }
+} 

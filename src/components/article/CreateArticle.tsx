@@ -217,7 +217,8 @@ const CreateArticlePage = () => {
           notes: response.notes || ''
         };
       } else {
-        result = await api.article.extractFromImage(file);
+        const response = await api.article.extractFromImage(file);
+        result = response;
       }
 
       const formattedReference = result.reference 
@@ -518,8 +519,8 @@ const CreateArticlePage = () => {
                           <div>
                             <Label>{t('Titre extrait')}</Label>
                             <div className="p-3 border rounded-md bg-gray-50">
-                              {ocrResult?.title || t('Aucun titre détecté')}
-                            </div>
+  {ocrResult?.title || t('Aucun titre détecté')}
+</div>
                           </div>
                           
                           <div>

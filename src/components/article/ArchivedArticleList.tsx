@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ChevronLeft, ChevronRight, PackageSearch, RotateCcw, Search } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ArticleStatus } from '@/types';
 
 const ArchivedArticleList: React.FC = () => {
   const router = useRouter();
@@ -47,36 +48,27 @@ const ArchivedArticleList: React.FC = () => {
     }
   }, [articles, page, pageSize]);
 
-  // Restore article mutation
-  const restoreArticleMutation = useMutation({
-    mutationFn: async (id: number) => {
-      return await api.article.restoreArticle(id);
-    },
-    onMutate: async (id: number) => {
-      await queryClient.cancelQueries(['archived-articles']);
-      const previousArticles = queryClient.getQueryData(['archived-articles']);
-
-      queryClient.setQueryData(['archived-articles'], (old: any) => 
-        old?.filter((article: any) => article.id !== id) || []
-      );
-
-      return { previousArticles };
-    },
-    onError: (err, id, context: any) => {
-      queryClient.setQueryData(['archived-articles'], context.previousArticles);
-      toast.error(t('Erreur lors de la restauration de l\'article'));
-    },
+  // Update article status mutation
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: ArticleStatus }) => 
+      api.article.updateArticleStatus(id, status),
     onSuccess: () => {
-      toast.success(t('Article restauré avec succès'));
+      toast.success(t('article:status_update_success.active'));
+      queryClient.invalidateQueries({ queryKey: ['archived-articles'] });
+      queryClient.invalidateQueries({ queryKey: ['active-articles'] });
     },
-    onSettled: () => {
-      queryClient.invalidateQueries(['archived-articles']);
-      queryClient.invalidateQueries(['articles']); // Refresh active articles list
+    onError: (error: any) => {
+      console.error('Error updating article status:', error);
+      toast.error(error.message || t('article:status_update_error'));
     }
   });
 
-  const handleRestoreArticle = (id: number) => {
-    restoreArticleMutation.mutate(id);
+  const handleStatusChange = async (id: number, newStatus: ArticleStatus) => {
+    try {
+      await updateStatusMutation.mutateAsync({ id, status: newStatus });
+    } catch (error) {
+      // Error is already handled in the mutation
+    }
   };
 
   // Client-side pagination
@@ -146,8 +138,16 @@ const ArchivedArticleList: React.FC = () => {
 
         <DataTable
           data={paginatedArticles}
-          columns={getArticleColumns(t, router, handleRestoreArticle)}
-          isPending={isLoading || restoreArticleMutation.isLoading}
+          columns={getArticleColumns(
+            t, 
+            router, 
+            undefined, 
+            handleStatusChange,
+            async (id: number) => {
+              await handleStatusChange(id, 'active');
+            }
+          )}
+          isPending={isLoading || updateStatusMutation.isPending}
         />
 
         {isLoading && (
